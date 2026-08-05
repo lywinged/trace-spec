@@ -57,10 +57,14 @@ informative action-receipt rules. The fixtures use
 fixture set leaves the TRACE wire profile and `schema/trace-claim.json`
 unchanged.
 
-Fixtures `01`–`09` cover the four receipt outcomes this document already
-describes. Fixtures `10`–`17` cover a **proposal that is still under review** and
-are described separately below; read that section before treating them as settled
-behaviour.
+The set falls in three ranges, and the distinction matters more than the numbering:
+
+- **`01`–`09`** cover the four receipt outcomes this document already describes.
+- **`10`–`17`** cover a **proposal that is still under review**, described separately
+  below. Read that section before treating any of them as settled behaviour.
+- **`18`–`24`** cover rules the verifier already applies and that nothing exercised.
+  These are not a proposal. They close gaps in behaviour this document already
+  requires.
 
 Each fixture contains:
 
@@ -133,6 +137,8 @@ to, as distinct from silence.
 | `16-gap-disclosure-untrusted-key.json` | `receipt_invalid` | The right key by chain position, not held by the verifier. |
 | `17-gap-disclosure-tampered.json` | `receipt_invalid` | Altered after signing. |
 
+`gen_gap_disclosure_vectors.py` regenerates this range byte-for-byte.
+
 **These implement the design in `proposals/117-gap-disclosure-design.md`, which departs
 from the field list in #117.** A disclosure carries `previous_receipt_hash` like any chain
 element, and no `disclosed_at`, `range_start_after`, or `range_end_before`. The reason is
@@ -161,6 +167,40 @@ requirements, and each is a question for the maintainers:
 
 The signing keys are deliberately deterministic test keys, so the fixture set
 regenerates byte-for-byte. Only public JWKs appear in the files.
+
+## Rule coverage: checks nothing exercised
+
+> Fixtures `18`–`24` are **not a proposal**. Every rule below is one the verifier in
+> `tests/test_action_receipt_fixtures.py` already applies, and which no fixture
+> distinguished. Until these existed, an implementation could omit each check entirely
+> and still pass the published set — which is the one thing a conformance suite exists
+> to prevent.
+
+| Fixture | Rule | What an implementation could have skipped |
+|---|---|---|
+| `18-action-ref-not-recomputable.json` | `action_ref_invalid` | Recomputing the action reference instead of trusting the declared value |
+| `19-call-id-mismatch.json` | `call_id_mismatch` | Checking the receipt is bound to *this* call |
+| `20-session-id-mismatch.json` | `session_id_mismatch` | Checking it is bound to *this* session |
+| `21-evidence-hash-mismatch.json` | `evidence_hash_mismatch` | Recomputing the evidence digest |
+| `22-receipt-issuer-key-untrusted.json` | `issuer_key_untrusted` | Checking the signing key against a pinned set at all |
+| `23-receipt-from-future.json` | `receipt_from_future` | Rejecting a receipt issued after the verification time |
+| `24-decision-not-in-enum.json` | `decision_invalid` | Refusing to read an unknown verb as accept or reject |
+
+Two are load-bearing for the trust model rather than tidiness. Without
+`issuer_key_untrusted` a receipt authenticates itself: a signature verifies against
+whatever key it names, and only a pinned set decides whether that key was ever entitled
+to speak. Without `evidence_hash_mismatch` the signature covers a digest whose document
+can be swapped, because the receipt signs `evidence_hash` and not the evidence body.
+
+They were found by walking the verifier's source for every failure code it can emit and
+comparing that against the codes the fixtures expect — not by reading the set and
+guessing. The method, and what it does not establish, is in
+[`docs/conformance-method.md`](../../docs/conformance-method.md).
+
+One fixture per rule, each triggering exactly that rule and nothing else, so a failure
+names the check that broke. They pin their own deterministic test key, since the private
+half of the key behind `01`–`09` is not published and each fixture already carries its
+own `trusted_issuer_keys`. `gen_rule_coverage_vectors.py` regenerates them byte-for-byte.
 
 ## Boundary
 
