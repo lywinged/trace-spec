@@ -42,8 +42,23 @@ vectors, which have to be runnable by an implementation that shares no code with
 tests bound to our API are not that. They were rewritten as implementation-agnostic JSON
 with a thin adapter, matching the shape the #117 vectors already had.
 
-**Still in the wrong repository.** The issue names `trace-tests`. These sit in
-`trace-spec` because that is where the branch is. Moving or mirroring them is open work.
+**On the repository these belong in.** An earlier revision of this entry said the
+vectors were in the wrong place because both issues name `trace-tests`. That was wrong,
+and checking `trace-tests` is what settled it:
+
+- It is a **certification suite**, run against an implementation
+  (`trace-tests verify --record ... --level 1`). Its `tests/vectors/` hold whole Trust
+  Records, and its seven modules map to normative spec sections. It has no
+  action-receipt module at all.
+- Upstream already put action-receipt conformance fixtures in `trace-spec`, in #101, by
+  a different contributor. That is the established practice, whatever the issue text
+  says.
+- Spec §3.3.2 marks action receipts **informative**, and a certification suite cannot
+  test a requirement that is not normative yet.
+
+So `trace-spec` is the right home while the mechanism is a proposal. The move to
+`trace-tests` is what happens *after* normative text lands, not before, and it is
+gated on that rather than pending.
 
 ### #117 — GapDisclosure claim and the fifth verifier outcome
 
@@ -73,7 +88,8 @@ leaves open recorded next to the fixtures.
   proves the fixtures and the checker agree, and one hand wrote both.
 - **Coverage.** 97% overall; the new profile-handling code is fully covered and the
   eleven uncovered statements are pre-existing error branches.
-- **152 tests, ruff, and mypy strict pass on 3.11, 3.13 and 3.14.**
+- **195 tests, ruff, and mypy strict pass on 3.11, 3.12, 3.13 and 3.14** — the full CI
+  matrix, verified locally and confirmed green on the branch after push.
 
 None of that establishes that the proposals are correct. It establishes that the vectors
 fail when they should and that the fixtures are not merely agreeing with their own
@@ -85,7 +101,8 @@ generator.
 
 **Recorded by:** Claude (Opus 5)
 **Decision-maker:** Louie Lu
-**Status:** PROPOSED — the reading of the governance rule is mine; whether to raise it on the issue is the decision
+**Status:** ACCEPTED 2026-08-05 — decision delegated by Louie Lu. Already in force: the
+vectors shipped and no normative text was written.
 
 **Decision:**
 
@@ -150,7 +167,9 @@ vectors were always shippable on their own schedule.
 
 **Recorded by:** Claude (Opus 5)
 **Decision-maker:** Louie Lu
-**Status:** PROPOSED — drafted for approval; the boundary in point 2 is the part that needs a decision-maker, not the tooling
+**Status:** ACCEPTED 2026-08-05 — decision delegated by Louie Lu. Point 2 binds how this
+project's own releases are described in public, everywhere, not only in this repository.
+To say otherwise, append a superseding entry; do not edit this one.
 
 **Decision:**
 
