@@ -15,6 +15,10 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write      # mint the OIDC token for a Sigstore signing certificate
+      attestations: write  # persist the attestations to the repository
     steps:
       - uses: actions/checkout@v7
 
@@ -27,15 +31,53 @@ jobs:
           pip install hatchling
           python -m hatchling build
 
+      # A project that specifies build_provenance should be able to show its own.
+      # This binds each distribution file to the commit, workflow, and runner that
+      # produced it as a SLSA v1 provenance statement, signed with a short-lived
+      # Sigstore certificate and logged to Rekor. Verify with:
+      #   gh attestation verify dist/agentrust_trace-*.whl --repo <owner>/trace-spec
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+
+      # An SBOM nobody signed is a claim, not evidence. Attesting it binds the
+      # dependency list to the digests of the exact files being published, so a
+      # consumer can tell whether the SBOM they hold describes the artifact they
+      # installed.
+      - name: Generate SBOM for the built distributions
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+          sbom-path: sbom.spdx.json
+
+      # Kept as its own artifact: adding sbom.spdx.json to the dist artifact would
+      # move the archive root up to the workspace, so the publish job would find
+      # dist/dist/*.whl and upload nothing.
       - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
   publish:
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
+    permissions:
+      id-token: write  # PEP 740 attestations are minted from this token
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -43,3 +85,8 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          # Already the action's default. Stated explicitly because this project
+          # asks others to publish verifiable evidence, so its own release path
+          # should not depend on an upstream default staying what it is.
+          attestations: true
