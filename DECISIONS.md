@@ -7,6 +7,80 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-05 — Neither #116 nor #117 is resolved by this branch, and here is exactly what is
+
+**Recorded by:** Claude (Opus 5)
+**Decision-maker:** Louie Lu
+**Status:** RECORD — a statement of delivered scope, not a decision to approve
+
+Written because "the tests pass" is not the same claim as "the issue is closed", and the
+gap between them is where a contribution over-states itself.
+
+### #116 — format-versioning and verifier-compatibility obligations
+
+| The issue asks for | State |
+|---|---|
+| Records carry an explicit profile version | Already true. `eat_profile` is required by the schema and the model. |
+| A verifier declares its supported set and MUST refuse anything outside it | **Implemented in this library.** No normative text written. |
+| The verification statement names the version it ran under | **Implemented.** No normative text written. |
+| Downgrade MUST be disclosed; silent fallback non-conformant | **Implemented.** No normative text written. |
+| Conformance vectors | Seven, in `examples/verifier-compatibility/`. |
+
+**Not delivered: any normative text.** All four obligations are proposals for
+`docs/verification.md` and none of them is written. A library doing something is not the
+specification requiring it, and the issue asks for the second.
+
+**One genuine fix, separable from the proposal.** `verify_record()` never read
+`eat_profile` at all, so a record under any profile verified as if it were v0.2 — while
+`spec/trace-v0.2.md` already requires a v0.2 verifier to reject the v0.1 identifier. That
+is an already-merged requirement the reference implementation did not carry out, in the
+same shape as the revocation gap closed in #113, and it needs no window and no sponsor.
+
+**Correction made during review.** The first version of these vectors was written as
+Python tests against this library's function signature. The issue asks for conformance
+vectors, which have to be runnable by an implementation that shares no code with ours;
+tests bound to our API are not that. They were rewritten as implementation-agnostic JSON
+with a thin adapter, matching the shape the #117 vectors already had.
+
+**Still in the wrong repository.** The issue names `trace-tests`. These sit in
+`trace-spec` because that is where the branch is. Moving or mirroring them is open work.
+
+### #117 — GapDisclosure claim and the fifth verifier outcome
+
+| The issue asks for | State |
+|---|---|
+| `GapDisclosure` claim | Not written as schema or spec text. |
+| Fifth outcome + re-scope of `receipt_missing_required` | Not written. |
+| Verifier obligations (four MUSTs) | Not written. |
+| Conformance vectors | Eight, in `examples/action-receipts/conformance/`, marked as proposed. |
+| Schema PR tracking the spec PR | Not written. |
+
+**Not delivered: the proposal itself.** What exists is a runnable model of the mechanism
+so it can be argued about against code instead of prose, plus the four choices the issue
+leaves open recorded next to the fixtures.
+
+### What was done to check the above
+
+- **Mutation tests, run manually, not retained as automation.** Disabling the profile
+  check failed 3 tests; tampering a fixture signature failed 1; flipping a fixture's
+  expected outcome failed 1; re-signing a deliberately-invalid vector so that it became
+  genuinely valid failed 2, including the independent path with the diagnostic that the
+  vector had stopped testing what it names.
+- **Independent signature verification, retained.**
+  `tests/test_fixture_signatures_independent.py` re-derives every fixture signature using
+  `cryptography` and `rfc8785` directly, importing nothing from `agentrust_trace` and
+  sharing no helper with the conformance modules. A green conformance run otherwise only
+  proves the fixtures and the checker agree, and one hand wrote both.
+- **Coverage.** 97% overall; the new profile-handling code is fully covered and the
+  eleven uncovered statements are pre-existing error branches.
+- **152 tests, ruff, and mypy strict pass on 3.11, 3.13 and 3.14.**
+
+None of that establishes that the proposals are correct. It establishes that the vectors
+fail when they should and that the fixtures are not merely agreeing with their own
+generator.
+
+---
+
 ## 2026-08-05 — Ship the #117 vectors now; the comment window is ambiguous, so ask
 
 **Recorded by:** Claude (Opus 5)
