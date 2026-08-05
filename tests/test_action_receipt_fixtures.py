@@ -225,6 +225,16 @@ def test_fixture_set_is_complete() -> None:
         "15-gap-disclosed-null-estimate.json",
         "16-gap-disclosure-untrusted-key.json",
         "17-gap-disclosure-tampered.json",
+        # 18-24 close the receipt rules that had no vector at all. Each was a check a
+        # conforming implementation could have omitted entirely while passing this
+        # suite; `test_vector_completeness.py` is what found them.
+        "18-action-ref-not-recomputable.json",
+        "19-call-id-mismatch.json",
+        "20-session-id-mismatch.json",
+        "21-evidence-hash-mismatch.json",
+        "22-receipt-issuer-key-untrusted.json",
+        "23-receipt-from-future.json",
+        "24-decision-not-in-enum.json",
     ]
 
 

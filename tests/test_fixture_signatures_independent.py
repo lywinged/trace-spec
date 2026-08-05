@@ -38,12 +38,38 @@ def _verify(signed: dict[str, Any], jwk: dict[str, str]) -> None:
     key.verify(_b64url(signed["signature"]), body)
 
 
-# (path, expectation) — "valid" or the reason it is deliberately not verifiable.
-GAP_DIR = EXAMPLES / "action-receipts" / "conformance"
+RECEIPT_DIR = EXAMPLES / "action-receipts" / "conformance"
 COMPAT_DIR = EXAMPLES / "verifier-compatibility"
 
-GAP_FIXTURES = sorted(GAP_DIR.glob("1*.json"))
+ALL_RECEIPT_FIXTURES = sorted(RECEIPT_DIR.glob("*.json"))
 COMPAT_FIXTURES = sorted(COMPAT_DIR.glob("*.json"))
+
+
+def _has(key: str) -> list[Path]:
+    """Select fixtures by what they contain, never by filename.
+
+    A `1*.json` glob selected the gap fixtures until seven receipt fixtures numbered
+    18 and 19 appeared and were silently pulled in. Selection by shape cannot drift
+    when the set is renumbered.
+    """
+    out = []
+    for path in ALL_RECEIPT_FIXTURES:
+        if key in json.loads(path.read_text(encoding="utf-8")):
+            out.append(path)
+    return out
+
+
+GAP_FIXTURES = _has("gap_disclosure")
+RECEIPT_FIXTURES = _has("receipt")
+
+# Fixtures with nothing to verify, each with the reason. An entry is a claim that has
+# to survive review; the alternative is a selector that quietly skips a fixture and a
+# suite that reports full coverage it does not have.
+SIGNATURE_FREE = {
+    "03-missing-required-receipt.json": (
+        "the absence of a receipt is the case under test, so there is no signature"
+    ),
+}
 
 
 @pytest.mark.parametrize("path", GAP_FIXTURES, ids=lambda p: p.stem)
@@ -88,9 +114,51 @@ def test_verifier_compatibility_signature_independently(path: Path) -> None:
     _verify(fixture["record"], fixture["trusted_key"])
 
 
-def test_both_fixture_sets_were_found() -> None:
-    """Guard against the globs silently matching nothing after a directory move."""
-    assert len(GAP_FIXTURES) == 8, f"expected 8 gap fixtures, found {len(GAP_FIXTURES)}"
-    assert len(COMPAT_FIXTURES) == 7, (
-        f"expected 7 compatibility fixtures, found {len(COMPAT_FIXTURES)}"
+@pytest.mark.parametrize("path", RECEIPT_FIXTURES, ids=lambda p: p.stem)
+def test_receipt_signature_independently(path: Path) -> None:
+    """The receipts, not only the gap disclosures, verified through the same path."""
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    receipt = fixture["receipt"]
+    jwk = fixture["trusted_issuer_keys"].get(receipt["issuer_key_id"])
+    failures = set(fixture["expected"].get("failures", []))
+    is_negative = bool({"signature_or_key_mismatch", "issuer_key_untrusted"} & failures)
+
+    if jwk is None:
+        assert is_negative, (
+            f"{path.name}: receipt key is not pinned, but no key or signature failure "
+            "is expected"
+        )
+        return
+
+    try:
+        _verify(receipt, jwk)
+    except InvalidSignature:
+        assert is_negative, (
+            f"{path.name}: receipt signature does not verify through an independent "
+            "path, and no signature failure is expected"
+        )
+        return
+
+    assert not is_negative, (
+        f"{path.name}: a signature or key failure is expected, but the receipt "
+        "signature verifies. The vector is not testing what it names."
+    )
+
+
+def test_every_fixture_is_covered_by_some_independent_check() -> None:
+    """No fixture may sit in the directory with its signature never re-derived.
+
+    Selection is by shape, so a fixture carrying neither a receipt nor a disclosure
+    would otherwise be skipped by both parametrizations without anything noticing.
+    """
+    covered = {p.name for p in GAP_FIXTURES} | {p.name for p in RECEIPT_FIXTURES}
+    every = {p.name for p in ALL_RECEIPT_FIXTURES}
+    uncovered = sorted(every - covered - set(SIGNATURE_FREE))
+    assert not uncovered, (
+        f"fixtures with no independently verifiable signature: {uncovered}. "
+        "If one is signature-free by design, say so explicitly rather than letting "
+        "the selectors skip it."
+    )
+    assert GAP_FIXTURES and RECEIPT_FIXTURES and COMPAT_FIXTURES, (
+        "a selector matched nothing, so its checks would pass vacuously"
     )
