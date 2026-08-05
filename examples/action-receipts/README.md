@@ -57,6 +57,11 @@ informative action-receipt rules. The fixtures use
 fixture set leaves the TRACE wire profile and `schema/trace-claim.json`
 unchanged.
 
+Fixtures `01`–`09` cover the four receipt outcomes this document already
+describes. Fixtures `10`–`17` cover a **proposal that is still under review** and
+are described separately below; read that section before treating them as settled
+behaviour.
+
 Each fixture contains:
 
 - `context`, which supplies the expected session, call, receipt-chain
@@ -98,6 +103,55 @@ access.
 
 The pinned JWKs and signatures are public test material. Deployments must use
 their own trusted issuer keys.
+
+## Proposed: disclosed receipt gaps (under review, not accepted)
+
+> Fixtures `10`–`17` encode the mechanism proposed in
+> [agentrust-io/trace-spec#117](https://github.com/agentrust-io/trace-spec/issues/117).
+> **No normative text for it has been accepted.** They exist so the mechanism can
+> be exercised and argued about against running code rather than prose. Do not
+> read a passing fixture here as a conformance requirement.
+
+The four outcomes above put two different situations in one bucket. A receipt
+that is simply absent and a receipt that was lost in a bounded, disclosed crash
+both produce `receipt_missing_required`, so an operator who says "I lost 50 ms of
+receipts" scores exactly as an adversary who deleted them silently. That rewards
+backfilling over disclosure, which is the wrong incentive for an evidence format.
+
+The proposal adds a signed, chain-bound `GapDisclosure` claim and a fifth
+outcome, `receipt_gap_disclosed`: bounded negative evidence the operator attested
+to, as distinct from silence.
+
+| Fixture | Outcome | What it pins down |
+|---|---|---|
+| `10-gap-disclosed-valid.json` | `receipt_gap_disclosed` | A signed, chain-bound disclosure covering exactly the absent range. |
+| `11-gap-disclosure-range-mismatch.json` | `receipt_missing_required` | A partial disclosure does not launder the receipts it fails to cover. |
+| `12-gap-disclosure-unbound.json` | `receipt_invalid` | Not sealed at the resumption point. A signature proves authorship, not position. |
+| `13-gap-disclosure-contradicted.json` | `receipt_invalid` | Claims a gap over receipts that are present. Self-contradiction impeaches the emitter. |
+| `14-gap-disclosure-foreign-key.json` | `receipt_invalid` | Signed by a trusted key that is neither the receipt-issuing key nor its parent. |
+| `15-gap-disclosed-null-estimate.json` | `receipt_gap_disclosed` | `receipts_lost_estimate` may be null; the range boundaries stay normative. |
+| `16-gap-disclosure-untrusted-key.json` | `receipt_invalid` | Right key identifier, key not in the verifier's trusted set. |
+| `17-gap-disclosure-tampered.json` | `receipt_invalid` | Altered after signing. |
+
+A forged or self-contradictory disclosure is worse than none, so it yields
+`receipt_invalid` rather than falling back to the silent case.
+
+**Choices these fixtures had to make that the issue does not settle.** They are
+implementation decisions taken to get something runnable, not proposed
+requirements, and each is a question for the maintainers:
+
+1. **Chain binding** is checked as `disclosed_at == range_end_before`. The issue
+   says "sealed at the resumption point" without defining the check.
+2. **Coverage** is an exact boundary match against the absent range. Chain
+   positions are hashes and therefore not orderable, so "covers" cannot be a
+   range comparison without more structure than the issue provides.
+3. **Issuer binding** reads the receipt-issuing key from the verification
+   context, with an optional parent identifier for the hierarchical-parent rule.
+4. **Overlapping disclosures** are deliberately not implemented. The issue leaves
+   the case genuinely underspecified, and a test is the wrong place to settle it.
+
+The signing keys are deliberately deterministic test keys, so the fixture set
+regenerates byte-for-byte. Only public JWKs appear in the files.
 
 ## Boundary
 
