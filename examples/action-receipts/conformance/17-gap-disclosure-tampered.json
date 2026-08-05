@@ -1,0 +1,55 @@
+{
+  "name": "gap-disclosure-tampered",
+  "description": "The disclosure was altered after signing, so the signature no longer covers its contents.",
+  "profile": "trace.action_receipt.conformance.v0",
+  "context": {
+    "call_id": "01986d7c-6b2f-7c68-9ff8-3e2f9d0db337",
+    "session_id": "trace-session-2026-07-06T15:22:11Z",
+    "require_receipt": true,
+    "verification_time": "2026-07-06T15:24:00Z",
+    "max_receipt_age_seconds": 300,
+    "expected_previous_receipt_hash": "sha256:c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    "receipt_issuing_key_id": "did:web:factory.example:safety-controller#ed25519-2026q3",
+    "absent_receipt_range": {
+      "start_after": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "end_before": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    }
+  },
+  "action": {
+    "agent_id": "spiffe://factory.example/agent/ros2-fibonacci/dev",
+    "action_type": "ros2.action.example_interfaces/Fibonacci",
+    "action_scope": "/abort_fibonacci_process",
+    "action_timestamp": "2026-07-06T15:22:13Z",
+    "action_ref": "sha256:c2e97956de8b86d825780fcecea601a6eea02616855e6f0aa19d10bd351fe034"
+  },
+  "trusted_issuer_keys": {
+    "did:web:factory.example:safety-controller#ed25519-2026q3": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"
+    },
+    "did:web:factory.example:fleet-telemetry#ed25519-2026q3": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc"
+    }
+  },
+  "gap_disclosure": {
+    "type": "GapDisclosure/1.0",
+    "range_start_after": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "range_end_before": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "cause": "crash",
+    "receipts_lost_estimate": 99,
+    "disclosed_at": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-2026q3",
+    "signature": "3iszKeBS9ORFu0DRzIiK-L6eiThOf6ShJX7ilkmgxYOc1I9rt2rInilDfgP52ZYKkZJHInyLcWkLEYhqvtPVCQ"
+  },
+  "expected": {
+    "status": "receipt_invalid",
+    "controller_outcome": "unknown",
+    "failures": [
+      "disclosure_signature_invalid"
+    ],
+    "warnings": []
+  }
+}

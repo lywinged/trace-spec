@@ -56,20 +56,86 @@ def _verify_signature(receipt: dict[str, Any], trusted_jwk: dict[str, str]) -> N
     public_key.verify(_decode_base64url(receipt["signature"]), rfc8785.dumps(signing_input))
 
 
+def _verify_gap_disclosure(
+    fixture: dict[str, Any], disclosure: dict[str, Any]
+) -> ReceiptResult:
+    """Evaluate a GapDisclosure covering receipts that were never emitted.
+
+    A disclosed gap is distinct from ``receipt_chain_gap``: the latter is a present
+    receipt whose predecessor hash does not match, while a disclosure accounts for
+    receipts that do not exist.
+    """
+    context = fixture["context"]
+    failures: list[str] = []
+
+    trusted_jwk = fixture["trusted_issuer_keys"].get(disclosure["issuer_key_id"])
+    if trusted_jwk is None:
+        failures.append("disclosure_key_untrusted")
+    else:
+        try:
+            _verify_signature(disclosure, trusted_jwk)
+        except (InvalidSignature, ValueError):
+            failures.append("disclosure_signature_invalid")
+
+    permitted_issuers = {
+        context["receipt_issuing_key_id"],
+        context.get("receipt_issuing_key_parent_id"),
+    }
+    if disclosure["issuer_key_id"] not in permitted_issuers:
+        failures.append("disclosure_issuer_not_receipt_key")
+
+    if disclosure["disclosed_at"] != disclosure["range_end_before"]:
+        failures.append("disclosure_not_chain_bound")
+
+    if context.get("receipts_present_in_claimed_range", False):
+        failures.append("disclosure_contradicted")
+
+    if failures:
+        return ReceiptResult(
+            status="receipt_invalid",
+            controller_outcome="unknown",
+            failures=failures,
+            warnings=[],
+        )
+
+    absent = context["absent_receipt_range"]
+    covers = (
+        disclosure["range_start_after"] == absent["start_after"]
+        and disclosure["range_end_before"] == absent["end_before"]
+    )
+    if not covers:
+        return ReceiptResult(
+            status="receipt_missing_required",
+            controller_outcome="unknown",
+            failures=["disclosure_range_not_covering"],
+            warnings=[],
+        )
+
+    return ReceiptResult(
+        status="receipt_gap_disclosed",
+        controller_outcome="unknown",
+        failures=[],
+        warnings=["receipt_gap_disclosed"],
+    )
+
+
 def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
     context = fixture["context"]
     action = fixture["action"]
     receipt = fixture.get("receipt")
 
     if receipt is None:
-        if context["require_receipt"]:
-            return ReceiptResult(
-                status="receipt_missing_required",
-                controller_outcome="unknown",
-                failures=["receipt_missing"],
-                warnings=[],
-            )
-        raise AssertionError("the conformance set has no optional missing-receipt case")
+        if not context["require_receipt"]:
+            raise AssertionError("the conformance set has no optional missing-receipt case")
+        disclosure = fixture.get("gap_disclosure")
+        if disclosure is not None:
+            return _verify_gap_disclosure(fixture, disclosure)
+        return ReceiptResult(
+            status="receipt_missing_required",
+            controller_outcome="unknown",
+            failures=["receipt_missing"],
+            warnings=[],
+        )
 
     failures: list[str] = []
     warnings: list[str] = []
@@ -151,6 +217,14 @@ def test_fixture_set_is_complete() -> None:
         "07-receipt-chain-gap.json",
         "08-same-party-self-report.json",
         "09-unsupported-physical-completion.json",
+        "10-gap-disclosed-valid.json",
+        "11-gap-disclosure-range-mismatch.json",
+        "12-gap-disclosure-unbound.json",
+        "13-gap-disclosure-contradicted.json",
+        "14-gap-disclosure-foreign-key.json",
+        "15-gap-disclosed-null-estimate.json",
+        "16-gap-disclosure-untrusted-key.json",
+        "17-gap-disclosure-tampered.json",
     ]
 
 
