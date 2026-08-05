@@ -188,7 +188,7 @@ Verification proves *what happened during the recorded session* under the stated
 - Prove the signing key is still trusted; offline verification cannot prove non-revocation, so pass a `revocation` store
 - Prove the agent's internal reasoning was sound
 - Prove the policy was correctly authored for the intent
-- Prove tool call *contents* (only the hash of the transcript is in v0.1)
+- Prove tool call *contents* (only the hash of the transcript is in v0.2)
 - Prove physical completion or functional-safety compliance for externally consequential actions
 - Replace ongoing monitoring
 

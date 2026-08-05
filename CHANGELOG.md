@@ -21,6 +21,18 @@ Format: [Semantic Versioning](https://semver.org/). Spec versions follow `MAJOR.
 
 - **`jwk_thumbprint(jwk)`**: RFC 7638 JWK Thumbprint (RFC 8037 §2 for OKP), exported so callers can key a revocation list on the same identifier the verifier derives.
 
+### Fixed
+
+- **The packaged schema had drifted from the normative one, so `validate_json()` rejected DID subjects.** `validate.py` loads `agentrust_trace/schema/trace-v0.2.json`, while the spec, README, and CONTRIBUTING all name the root `schema/trace-claim.json` as normative. The 0.2.0 DID extension (`subject` pattern `^(spiffe://|did:)`) reached the root file and not the packaged copy, which still carried `^spiffe://`. A record with a `did:mesh:` subject therefore passed `TrustRecord.model_validate()` and failed `validate_json()` — two validation paths disagreeing about the same record, where the answer a caller got depended only on which entry point they used.
+
+  The packaged file is now a copy of the root file, and a test asserts the two keep parsing to the same schema. The root file's `$id` also still said `trace-v0.1.json` after the v0.2 cutover. No normative text or field definition changed: this restores the schema the spec already describes.
+
+- **Version identifiers realigned.** `agentrust_trace.__version__` said `0.2.0` while the distribution was `0.5.1`, so a bug report quoting it pointed at the wrong release; a test now pins it to the installed distribution metadata. The `pyproject.toml` description, the README spec badge, and the docstrings in `models.py`, `validate.py`, `adapters/agt.py`, plus the docs and examples READMEs, all still said "v0.1" after the v0.2 cutover.
+
+- **CI now tests the interpreters adopters actually run.** The matrix covered only 3.11 and 3.12, so a break on 3.13 or 3.14 could reach PyPI without a failing build. It now spans 3.11 through 3.14, and the publish and docs workflows build on 3.14. `requires-python` stays at `>=3.11`: the floor is what downstream adopters install against, and nothing here needs a newer one.
+
+- **OWASP crosswalk corrected on delegation.** It stated that the schema has no parent/child record pointer; the optional `delegation` block (added in 0.4.0) carries `parent_record_hash` and `credential_id`. The remaining gap is that its binding rules are not normative until the A2A profile lands, which is what the entry now says.
+
 ## [0.5.1] — 2026-07-28
 
 ### Fixed
@@ -62,6 +74,25 @@ Format: [Semantic Versioning](https://semver.org/). Spec versions follow `MAJOR.
 
 ---
 
+## [0.2.0]
+
+### Specification
+
+- Extend `subject` field to accept DID URIs (any `did:` method) in addition to SPIFFE SVIDs.
+  Previously `^spiffe://` only; now `^(spiffe://|did:)`. Additive, backward-compatible.
+  DID-native runtimes (e.g. AGT `did:mesh:` identities) no longer require a parallel SPIFFE identity.
+  Closes: microsoft/agent-governance-toolkit ADR-0032, agentrust-io/trace-spec#35.
+
+### Schema
+
+- `schema/trace-claim.json`: `subject` pattern updated to `^(spiffe://|did:)`, description updated.
+
+### Reference Implementation
+
+- `TrustRecord.subject` pattern updated to `r"^(spiffe://|did:)"`.
+
+---
+
 ## [0.1.0] — 2026-06-23
 
 Initial public draft. Announced at Confidential Computing Summit, San Francisco.
@@ -89,25 +120,6 @@ Initial public draft. Announced at Confidential Computing Summit, San Francisco.
 ### Open questions
 
 Seven open questions requiring community input before v0.2 are documented in §7 of the spec.
-
----
-
-## [0.2.0] — TBD
-
-### Specification
-
-- Extend `subject` field to accept DID URIs (any `did:` method) in addition to SPIFFE SVIDs.
-  Previously `^spiffe://` only; now `^(spiffe://|did:)`. Additive, backward-compatible.
-  DID-native runtimes (e.g. AGT `did:mesh:` identities) no longer require a parallel SPIFFE identity.
-  Closes: microsoft/agent-governance-toolkit ADR-0032, agentrust-io/trace-spec#35.
-
-### Schema
-
-- `schema/trace-claim.json`: `subject` pattern updated to `^(spiffe://|did:)`, description updated.
-
-### Reference Implementation
-
-- `TrustRecord.subject` pattern updated to `r"^(spiffe://|did:)"`.
 
 ---
 

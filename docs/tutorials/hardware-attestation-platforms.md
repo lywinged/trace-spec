@@ -125,7 +125,7 @@ For Intel TDX, `measurement` is the `MRTD` (Measurement of the TD) field from th
 
 The RIM endpoint is Intel Trust Authority (ITA). A verifier fetches the TD Quote (via `tdx-attest` or a platform attestation proxy), verifies the Intel root certificate chain, and confirms the `MRTD` value matches the reference for the expected image.
 
-TDX reports also carry `RTMR` (Runtime Measurement Registers) for post-launch measurements. TRACE v0.1 binds only `MRTD` in the `measurement` field; `RTMR` values are outside the current scope.
+TDX reports also carry `RTMR` (Runtime Measurement Registers) for post-launch measurements. TRACE v0.2 binds only `MRTD` in the `measurement` field; `RTMR` values are outside the current scope.
 
 ---
 

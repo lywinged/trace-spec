@@ -29,7 +29,12 @@ from agentrust_trace.validate import (
     validate_json,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.5.1"
+"""Distribution version, kept in step with ``pyproject.toml``.
+
+Not the spec version: this library implements TRACE v0.2, identified on the wire
+by the ``eat_profile`` URI, and the two version lines move independently.
+"""
 
 __all__ = [
     "__version__",

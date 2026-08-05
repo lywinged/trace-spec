@@ -13,7 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        # Floor through latest: 3.11 is the requires-python floor, 3.14 is what
+        # adopters on a current interpreter actually run. Testing only the floor
+        # lets a break on the newest release reach PyPI unnoticed.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v7

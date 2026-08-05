@@ -90,7 +90,7 @@ When you supply a key, the library uses it instead of `cnf.jwk`. If the record w
 
 ## Validate the Schema
 
-Signature verification confirms the record was not modified after signing. It says nothing about whether the record conforms to the TRACE v0.1 schema. A valid signature over a malformed record is still a malformed record.
+Signature verification confirms the record was not modified after signing. It says nothing about whether the record conforms to the TRACE v0.2 schema. A valid signature over a malformed record is still a malformed record.
 
 Call `validate_json()` to check schema conformance. It raises `jsonschema.ValidationError` on the first violation:
 

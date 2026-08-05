@@ -1,6 +1,6 @@
-# TRACE v0.1 example Trust Records
+# TRACE v0.2 example Trust Records
 
-Each file is a canonical TRACE v0.1 Trust Record that validates as-is against
+Each file is a canonical TRACE v0.2 Trust Record that validates as-is against
 `schema/trace-claim.json` (no preprocessing, no comment stripping).
 
 - `intel-tdx.json`: Intel TDX example.
