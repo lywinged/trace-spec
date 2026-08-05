@@ -124,14 +124,23 @@ to, as distinct from silence.
 
 | Fixture | Outcome | What it pins down |
 |---|---|---|
-| `10-gap-disclosed-valid.json` | `receipt_gap_disclosed` | A signed, chain-bound disclosure covering exactly the absent range. |
-| `11-gap-disclosure-range-mismatch.json` | `receipt_missing_required` | A partial disclosure does not launder the receipts it fails to cover. |
-| `12-gap-disclosure-unbound.json` | `receipt_invalid` | Not sealed at the resumption point. A signature proves authorship, not position. |
-| `13-gap-disclosure-contradicted.json` | `receipt_invalid` | Claims a gap over receipts that are present. Self-contradiction impeaches the emitter. |
-| `14-gap-disclosure-foreign-key.json` | `receipt_invalid` | Signed by a trusted key that is neither the receipt-issuing key nor its parent. |
-| `15-gap-disclosed-null-estimate.json` | `receipt_gap_disclosed` | `receipts_lost_estimate` may be null; the range boundaries stay normative. |
-| `16-gap-disclosure-untrusted-key.json` | `receipt_invalid` | Right key identifier, key not in the verifier's trusted set. |
+| `10-gap-disclosed-valid.json` | `receipt_gap_disclosed` | A disclosure spliced into the chain: it links back to a present element, and the next element links back to it. |
+| `11-gap-disclosure-dangling-predecessor.json` | `receipt_invalid` | Links back to an element that is not in the chain. Half a splice fixes nothing in place. |
+| `12-gap-disclosure-successor-does-not-link.json` | `receipt_invalid` | The next element links past the disclosure, leaving it attached at one end. |
+| `13-gap-disclosure-contradicted.json` | `receipt_invalid` | Implies elements are absent that are present. |
+| `14-gap-disclosure-foreign-key.json` | `receipt_invalid` | Signed by a trusted key that is neither the linked element's key nor an ancestor. |
+| `15-gap-disclosed-parent-key-null-estimate.json` | `receipt_gap_disclosed` | Signed by the hierarchical parent because the crash took the session key; `receipts_lost_estimate` is null. Reports a run of three consecutive disclosures. |
+| `16-gap-disclosure-untrusted-key.json` | `receipt_invalid` | The right key by chain position, not held by the verifier. |
 | `17-gap-disclosure-tampered.json` | `receipt_invalid` | Altered after signing. |
+
+**These implement the design in `proposals/117-gap-disclosure-design.md`, which departs
+from the field list in #117.** A disclosure carries `previous_receipt_hash` like any chain
+element, and no `disclosed_at`, `range_start_after`, or `range_end_before`. The reason is
+that a hash chain cannot express a range, and the emitter cannot know its successor's hash
+at the moment it writes the disclosure — so the issue's `disclosed_at == range_end_before`
+check compares two fields one party controls, and can only fail for an emitter that is
+buggy rather than one that is lying. Coverage is structural instead: the chain is linear
+and unbroken, so there is nowhere else the missing receipts could have been.
 
 A forged or self-contradictory disclosure is worse than none, so it yields
 `receipt_invalid` rather than falling back to the silent case.

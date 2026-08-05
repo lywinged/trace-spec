@@ -1,18 +1,29 @@
 {
   "name": "gap-disclosure-untrusted-key",
-  "description": "The disclosure is signed by the receipt-issuing key identifier, but that key is not in the verifier's trusted set.",
+  "description": "The named key is the one that signed the linked element, but the verifier does not hold it. Chain position does not confer trust.",
   "profile": "trace.action_receipt.conformance.v0",
+  "proposal": {
+    "issue": "agentrust-io/trace-spec#117",
+    "design": "proposals/117-gap-disclosure-design.md",
+    "status": "under review \u2014 not accepted normative text"
+  },
   "context": {
-    "call_id": "01986d7c-6b2f-7c68-9ff8-3e2f9d0db337",
     "session_id": "trace-session-2026-07-06T15:22:11Z",
     "require_receipt": true,
     "verification_time": "2026-07-06T15:24:00Z",
     "max_receipt_age_seconds": 300,
-    "expected_previous_receipt_hash": "sha256:c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
-    "receipt_issuing_key_id": "did:web:factory.example:safety-controller#ed25519-2027q1",
-    "absent_receipt_range": {
-      "start_after": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-      "end_before": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    "expected_previous_receipt_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "chain": {
+      "predecessor_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "predecessor_present": true,
+      "predecessor_issuer_key_id": "did:web:factory.example:safety-controller#ed25519-2027q1",
+      "permitted_ancestor_key_ids": [
+        "did:web:factory.example:safety-controller#ed25519-workload-attestation"
+      ],
+      "successor_previous_receipt_hash": "sha256:5f3d5ff3bb8b196a81cb9f1614adb226a840a2eb30a53ced9f85bbf883b587d7",
+      "successor_present": true,
+      "claimed_absent_but_present": [],
+      "consecutive_disclosures": 1
     }
   },
   "action": {
@@ -20,7 +31,7 @@
     "action_type": "ros2.action.example_interfaces/Fibonacci",
     "action_scope": "/abort_fibonacci_process",
     "action_timestamp": "2026-07-06T15:22:13Z",
-    "action_ref": "sha256:c2e97956de8b86d825780fcecea601a6eea02616855e6f0aa19d10bd351fe034"
+    "action_ref": "sha256:e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3"
   },
   "trusted_issuer_keys": {
     "did:web:factory.example:safety-controller#ed25519-2026q3": {
@@ -28,21 +39,25 @@
       "crv": "Ed25519",
       "x": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg"
     },
-    "did:web:factory.example:fleet-telemetry#ed25519-2026q3": {
+    "did:web:factory.example:safety-controller#ed25519-workload-attestation": {
       "kty": "OKP",
       "crv": "Ed25519",
       "x": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc"
+    },
+    "did:web:factory.example:safety-controller#ed25519-unrelated-but-trusted": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "XUDXAF07AOpCkKoxJLKnzU4nNa4X8rnk_j3gAv82Rig"
     }
   },
   "gap_disclosure": {
     "type": "GapDisclosure/1.0",
-    "range_start_after": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-    "range_end_before": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "previous_receipt_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "session_id": "trace-session-2026-07-06T15:22:11Z",
+    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-2027q1",
     "cause": "crash",
     "receipts_lost_estimate": 3,
-    "disclosed_at": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
-    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-2027q1",
-    "signature": "vViAj3zGTro9pGUO-Wezyt8_y2dNvUN74YywTEj-g3sUeZa5rK82ZAiUSlnXRIu4KGPz_Oj4lXjNdk_nAnlQCg"
+    "signature": "3OVGq6kohVs6Eg8IBse-PQyZVszCPinjTDyGwMJGlf36rMoDivcyCgGxL6c6amIGnZ6S-0icgTehZJUCPpHlCg"
   },
   "expected": {
     "status": "receipt_invalid",
@@ -50,6 +65,7 @@
     "failures": [
       "disclosure_key_untrusted"
     ],
-    "warnings": []
+    "warnings": [],
+    "consecutive_disclosures": 1
   }
 }

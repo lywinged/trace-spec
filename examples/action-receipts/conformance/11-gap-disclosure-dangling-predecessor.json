@@ -1,6 +1,6 @@
 {
-  "name": "gap-disclosure-foreign-key",
-  "description": "Signed by a key the verifier trusts, but which is neither the key that signed the linked element nor an ancestor of it. A gap is where introducing an unrelated key is most useful and least distinguishable from recovery.",
+  "name": "gap-disclosure-dangling-predecessor",
+  "description": "The disclosure links back to an element that is not in the chain. Half a splice is not a splice: it fixes nothing in place.",
   "profile": "trace.action_receipt.conformance.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#117",
@@ -15,12 +15,12 @@
     "expected_previous_receipt_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
     "chain": {
       "predecessor_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
-      "predecessor_present": true,
+      "predecessor_present": false,
       "predecessor_issuer_key_id": "did:web:factory.example:safety-controller#ed25519-2026q3",
       "permitted_ancestor_key_ids": [
         "did:web:factory.example:safety-controller#ed25519-workload-attestation"
       ],
-      "successor_previous_receipt_hash": "sha256:3c543561f448216d7569a5c3f6edabfb4694ef3d79ab5bc4998d2d1d0c47980a",
+      "successor_previous_receipt_hash": "sha256:cf36ee4d9b9dd71cb37c34dc57bcdacbb3c7b3ef42615a48409c2c4463c1b3d3",
       "successor_present": true,
       "claimed_absent_but_present": [],
       "consecutive_disclosures": 1
@@ -54,16 +54,16 @@
     "type": "GapDisclosure/1.0",
     "previous_receipt_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
     "session_id": "trace-session-2026-07-06T15:22:11Z",
-    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-unrelated-but-trusted",
+    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-2026q3",
     "cause": "crash",
     "receipts_lost_estimate": 3,
-    "signature": "k1OEGRftz9gN8m6CWBaM_MHoi9pSleIws7Y3gS4AWPYDIgq_76ljP9ZQCmMlLapC8L059matDjbQKK0Vj36YBQ"
+    "signature": "0WTbD_j2neboOUN8WmkWbVweYp0R-rYWb53LnWWjSomFzAtiZlHDmbKBVbVQ_dlpOj7ZN8cWz6WWzsCwGyCQDQ"
   },
   "expected": {
     "status": "receipt_invalid",
     "controller_outcome": "unknown",
     "failures": [
-      "disclosure_issuer_not_chain_key"
+      "disclosure_predecessor_absent"
     ],
     "warnings": [],
     "consecutive_disclosures": 1

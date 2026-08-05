@@ -1,6 +1,6 @@
 {
-  "name": "gap-disclosure-foreign-key",
-  "description": "Signed by a key the verifier trusts, but which is neither the key that signed the linked element nor an ancestor of it. A gap is where introducing an unrelated key is most useful and least distinguishable from recovery.",
+  "name": "gap-disclosed-parent-key-null-estimate",
+  "description": "Signed by the hierarchical parent, because the crash took the session key with it, and the count of lost receipts is not bounded. The estimate is an unverifiable self-report either way; the chain links are what hold.",
   "profile": "trace.action_receipt.conformance.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#117",
@@ -20,10 +20,10 @@
       "permitted_ancestor_key_ids": [
         "did:web:factory.example:safety-controller#ed25519-workload-attestation"
       ],
-      "successor_previous_receipt_hash": "sha256:3c543561f448216d7569a5c3f6edabfb4694ef3d79ab5bc4998d2d1d0c47980a",
+      "successor_previous_receipt_hash": "sha256:38617e4db9e0cb7279fe4f9b2f9938aa686692c4e56ed4451c4bd61286f37a9f",
       "successor_present": true,
       "claimed_absent_but_present": [],
-      "consecutive_disclosures": 1
+      "consecutive_disclosures": 3
     }
   },
   "action": {
@@ -54,18 +54,18 @@
     "type": "GapDisclosure/1.0",
     "previous_receipt_hash": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
     "session_id": "trace-session-2026-07-06T15:22:11Z",
-    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-unrelated-but-trusted",
+    "issuer_key_id": "did:web:factory.example:safety-controller#ed25519-workload-attestation",
     "cause": "crash",
-    "receipts_lost_estimate": 3,
-    "signature": "k1OEGRftz9gN8m6CWBaM_MHoi9pSleIws7Y3gS4AWPYDIgq_76ljP9ZQCmMlLapC8L059matDjbQKK0Vj36YBQ"
+    "receipts_lost_estimate": null,
+    "signature": "SQpH6hCFdjHPDivRcHc0PYHgrpAVpsKEOu6w9WlSbDs7c5ktGsLmrehbUtco-6ulNHcvKderbqudHNF8bmalAw"
   },
   "expected": {
-    "status": "receipt_invalid",
+    "status": "receipt_gap_disclosed",
     "controller_outcome": "unknown",
-    "failures": [
-      "disclosure_issuer_not_chain_key"
+    "failures": [],
+    "warnings": [
+      "receipt_gap_disclosed"
     ],
-    "warnings": [],
-    "consecutive_disclosures": 1
+    "consecutive_disclosures": 3
   }
 }

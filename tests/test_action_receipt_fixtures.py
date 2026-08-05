@@ -26,6 +26,11 @@ class ReceiptResult:
     controller_outcome: str
     failures: list[str]
     warnings: list[str]
+    consecutive_disclosures: int = 1
+    """Run length of back-to-back disclosures with no receipt between them.
+
+    One disclosed gap is an incident; nine in a row is a different claim about the
+    deployment, and collapsing them loses the part a relying party acts on."""
 
 
 def _load_fixture(path: Path) -> dict[str, Any]:
@@ -65,7 +70,7 @@ def _verify_gap_disclosure(
     receipt whose predecessor hash does not match, while a disclosure accounts for
     receipts that do not exist.
     """
-    context = fixture["context"]
+    chain = fixture["context"]["chain"]
     failures: list[str] = []
 
     trusted_jwk = fixture["trusted_issuer_keys"].get(disclosure["issuer_key_id"])
@@ -77,18 +82,34 @@ def _verify_gap_disclosure(
         except (InvalidSignature, ValueError):
             failures.append("disclosure_signature_invalid")
 
-    permitted_issuers = {
-        context["receipt_issuing_key_id"],
-        context.get("receipt_issuing_key_parent_id"),
-    }
-    if disclosure["issuer_key_id"] not in permitted_issuers:
-        failures.append("disclosure_issuer_not_receipt_key")
+    # Issuer binding is read off the chain, not supplied out of band: the disclosure
+    # must be signed by whoever signed the element it links back to, or an ancestor.
+    # That element is present by construction, so its key is knowable.
+    permitted = {chain["predecessor_issuer_key_id"], *chain["permitted_ancestor_key_ids"]}
+    if disclosure["issuer_key_id"] not in permitted:
+        failures.append("disclosure_issuer_not_chain_key")
 
-    if disclosure["disclosed_at"] != disclosure["range_end_before"]:
-        failures.append("disclosure_not_chain_bound")
+    # Sealed from both directions, or not sealed. The disclosure links back to a
+    # present element, and the next element links back to the disclosure. A
+    # disclosure attached at one end can be minted later and slid over any gap.
+    if disclosure["previous_receipt_hash"] != chain["predecessor_hash"] or not chain[
+        "predecessor_present"
+    ]:
+        failures.append("disclosure_predecessor_absent")
+    if (
+        chain["successor_present"]
+        and chain["successor_previous_receipt_hash"] != _sha256_jcs(disclosure)
+    ):
+        failures.append("disclosure_not_sealed_by_successor")
 
-    if context.get("receipts_present_in_claimed_range", False):
+    if chain["claimed_absent_but_present"]:
         failures.append("disclosure_contradicted")
+
+    # receipts_lost_estimate is deliberately not checked. The receipts it counts are
+    # absent by definition, so nothing here corroborates it, and its type is the
+    # schema's business rather than the verifier's. An earlier revision validated it;
+    # the completeness suite then reported the rule as load-bearing for no vector, and
+    # the attempt to justify it failed. Left as evidence that the rule was considered.
 
     if failures:
         return ReceiptResult(
@@ -98,24 +119,14 @@ def _verify_gap_disclosure(
             warnings=[],
         )
 
-    absent = context["absent_receipt_range"]
-    covers = (
-        disclosure["range_start_after"] == absent["start_after"]
-        and disclosure["range_end_before"] == absent["end_before"]
-    )
-    if not covers:
-        return ReceiptResult(
-            status="receipt_missing_required",
-            controller_outcome="unknown",
-            failures=["disclosure_range_not_covering"],
-            warnings=[],
-        )
-
+    # Coverage is structural under the splice model: the chain is linear and unbroken,
+    # so there is nowhere else the missing receipts could have been. Nothing to compare.
     return ReceiptResult(
         status="receipt_gap_disclosed",
         controller_outcome="unknown",
         failures=[],
         warnings=["receipt_gap_disclosed"],
+        consecutive_disclosures=chain["consecutive_disclosures"],
     )
 
 
@@ -218,11 +229,11 @@ def test_fixture_set_is_complete() -> None:
         "08-same-party-self-report.json",
         "09-unsupported-physical-completion.json",
         "10-gap-disclosed-valid.json",
-        "11-gap-disclosure-range-mismatch.json",
-        "12-gap-disclosure-unbound.json",
+        "11-gap-disclosure-dangling-predecessor.json",
+        "12-gap-disclosure-successor-does-not-link.json",
         "13-gap-disclosure-contradicted.json",
         "14-gap-disclosure-foreign-key.json",
-        "15-gap-disclosed-null-estimate.json",
+        "15-gap-disclosed-parent-key-null-estimate.json",
         "16-gap-disclosure-untrusted-key.json",
         "17-gap-disclosure-tampered.json",
         # 18-24 close the receipt rules that had no vector at all. Each was a check a
@@ -248,3 +259,5 @@ def test_action_receipt_conformance_fixture(fixture_path: Path) -> None:
     assert result.controller_outcome == fixture["expected"]["controller_outcome"]
     assert result.failures == fixture["expected"]["failures"]
     assert result.warnings == fixture["expected"]["warnings"]
+    if "consecutive_disclosures" in fixture["expected"]:
+        assert result.consecutive_disclosures == fixture["expected"]["consecutive_disclosures"]

@@ -143,20 +143,34 @@ nothing.
 
 ---
 
-## What this changes in the fixtures
+## What changed in the fixtures
 
-Fixtures `10`–`17` implement the issue's field list, not this design. If this position is
-adopted they need regenerating:
+The fixtures were regenerated against this design rather than left implementing the
+issue's field list. `gen_gap_disclosure_vectors.py` rebuilds them.
 
-| Fixture | Under this design |
+| Was | Now |
 |---|---|
-| `12-gap-disclosure-unbound.json` | Rewritten. It currently tests `disclosed_at != range_end_before`; the equivalent test becomes a disclosure whose `previous_receipt_hash` names no present receipt, or a successor that does not link back to it. |
-| `11-gap-disclosure-range-mismatch.json` | Removed or rewritten. Partial coverage is not expressible when coverage is structural. |
-| `14-gap-disclosure-foreign-key.json` | Kept, with the permitted issuer derived from the linked receipt rather than from context. |
-| `10`, `13`, `15`, `16`, `17` | Unaffected in substance. |
+| `11-gap-disclosure-range-mismatch` | **Removed.** Partial coverage is not expressible when coverage is structural. Replaced by `11-gap-disclosure-dangling-predecessor`: the disclosure links back to an element that is not in the chain. |
+| `12-gap-disclosure-unbound` (`disclosed_at != range_end_before`) | Replaced by `12-gap-disclosure-successor-does-not-link`: the next element links past the disclosure, leaving it attached at one end. This is the check the old fixture was reaching for and could not express. |
+| `14-gap-disclosure-foreign-key` | Kept. The permitted issuer is now read off the linked element instead of supplied through the verification context. |
+| `15-gap-disclosed-null-estimate` | Folded into `15-gap-disclosed-parent-key-null-estimate`, which also covers signing by the hierarchical parent — the case where the crash took the session key with it. |
+| `10`, `13`, `16`, `17` | Restructured onto the new fields; substance unchanged. |
 
-They have not been regenerated. Doing so before the design is agreed would replace one
-guess with another, and the current set at least documents which reading it implements.
+The disclosure no longer carries `disclosed_at`, `range_start_after`, or
+`range_end_before`. It carries `previous_receipt_hash`, like every other chain element.
+
+**One rule was removed rather than covered.** A draft of the verifier validated the type
+of `receipts_lost_estimate`. The completeness suite reported it as a rule no vector
+distinguished, and the attempt to justify it failed: the estimate is unverifiable by
+construction, and its type is the schema's business. It was deleted rather than given a
+fixture, which is the outcome that check exists to force.
+
+**Open: three requirements in the draft text have no vector.** The normative draft
+requires `type` to equal `GapDisclosure/1.0`, `session_id` to match the session, and
+`cause` to be one of four values. The fixture verifier does not implement those, so the
+completeness suite cannot flag them — it only sees rules that exist. This is the class of
+gap that method does not close, stated in `docs/conformance-method.md` §6, and it is
+recorded here rather than left for someone to find.
 
 ## What I might have wrong
 
