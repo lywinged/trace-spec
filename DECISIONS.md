@@ -7,6 +7,71 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-05 — Ship the #117 vectors now; the comment window is ambiguous, so ask
+
+**Recorded by:** Claude (Opus 5)
+**Decision-maker:** Louie Lu
+**Status:** PROPOSED — the reading of the governance rule is mine; whether to raise it on the issue is the decision
+
+**Decision:**
+
+1. **The comment window for #117 is genuinely ambiguous between 5 and 14 days. Ask; do not
+   assume.** Both readings are supportable from the same two documents:
+
+   - **5 days.** `GOVERNANCE.md`: non-breaking changes are "new optional fields, new
+     OPTIONAL conformance behavior, informative additions". #117 declares itself
+     non-breaking and is one optional claim plus one added outcome.
+   - **14 days.** `CONTRIBUTING.md` step 2: "Changes touching wire format, cryptographic
+     algorithms, or Trust Record required fields require 14 days", and `GOVERNANCE.md`:
+     "Wire format changes: treated as breaking regardless of backward-compatibility
+     argument." `GapDisclosure` is a new signed claim that travels on the wire with its own
+     canonicalization and signature convention, and #117 itself proposes gating the new
+     outcome behind the widened profile version from #114 — a profile URI change is what
+     made v0.2 breaking.
+
+   Counting from 2026-08-02: 5 days closes 2026-08-07, 14 days closes 2026-08-16. The
+   original plan assumed 5. Rather than pick one and risk arriving early on a first
+   normative contribution, put the question to the maintainers on the issue, alongside the
+   vectors, and take the longer reading unless told otherwise. Asking demonstrates the
+   governance documents were read; guessing wrong demonstrates the opposite.
+
+2. **Ship the conformance vectors now; hold the normative text.** `GOVERNANCE.md` requires
+   no sponsor and no window for "conformance tests, tooling, and informative additions".
+   The eight fixtures and the verifier support are exactly that, and they let the mechanism
+   be argued about against running code instead of prose. The spec PR waits.
+
+3. **Nothing here is submitted upstream on the strength of an assumed sponsor.**
+   `GOVERNANCE.md` requires an organizational sponsor for normative text, and names the
+   route when there is none: a Maintainer carries the PR and the proposer is credited in
+   the CHANGELOG. This branch relies on neither, because everything on it is in the
+   no-sponsor set — conformance tests, tooling, informative documentation, and one fix that
+   implements an already-merged requirement.
+
+4. **The fork's Actions are enabled** (verified 2026-08-05), so a PR from it arrives with a
+   CI run attached. The third open question in the delivery pack is closed.
+
+**Rationale:**
+
+Getting the window wrong is not a technical error, it is a governance one, and a proposal
+that arrives early reads as not having read the rules — the worst possible framing for a
+first normative contribution to a standards project. The nine days between 08-07 and 08-16
+cost nothing: the vectors are the deliverable that demonstrates the work, and they can land
+immediately.
+
+On sponsorship, `GOVERNANCE.md` states the reason plainly: a MUST is a promise the project
+keeps for every future version, and it needs an organization that will implement it and
+answer for it. Overstating who stands behind a requirement is the same failure this file
+already records for the project's own release evidence.
+
+**Implementation:** conformance vectors merged (fixtures 10-17 plus verifier support,
+authored by a separate agent session and applied here); `examples/action-receipts/README.md`
+marks them as unaccepted and records the four questions the issue leaves open.
+
+**Supersedes:** an earlier plan that targeted 2026-08-07, for the normative PR only. The
+vectors were always shippable on their own schedule.
+
+---
+
 ## 2026-08-05 — This project's own release evidence is Level 0, and is never described as attested
 
 **Recorded by:** Claude (Opus 5)
