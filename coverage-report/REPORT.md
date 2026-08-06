@@ -136,8 +136,10 @@ defect in the canonicalizer, because two paths verify them. Both paths called `r
 **The claim was unsupported as written** — a shared-canonicalizer defect would have been
 invisible to both.
 
-It is now supported. `scripts/jcs_minimal.py` is a second RFC 8785 serializer written from
-the RFC text, sharing no code and no design decisions with `rfc8785`; it refuses floats and
+It is now supported. [`scripts/jcs_minimal.py`](scripts/jcs_minimal.py) is a second RFC 8785
+serializer written from the RFC text, sharing no code, no helpers and no design decisions
+with `rfc8785`. It is 135 lines, straight-line and dependency-free, so reading it is a
+practical way to check it rather than a second act of faith. It refuses floats and
 out-of-range integers rather than guessing at ECMAScript `Number::toString`, which is honest
 because no fixture contains a float.
 
@@ -225,6 +227,8 @@ git clone https://github.com/agentrust-io/trace-spec && cd trace-spec && git che
 
 cd coverage-report/scripts
 python check_canonicalizer.py /path/to/trace-spec   # §4  differential + signatures
+                                                    #     (drives jcs_minimal.py, the
+                                                    #      independently written serializer)
 python inventory_guard.py     /path/to/trace-spec   # §5  unrecognised rule forms
 python mutation_report.py     /path/to/trace-spec   # §2,§3 margins + attribution
 python pair_mutation.py       /path/to/trace-spec   # §5  rank-two masking
