@@ -8,6 +8,8 @@ produce it.
 a URL.
 
 - [**REPORT.md**](REPORT.md) — the measurement, the findings, and how to re-run every figure.
+- [**HANDOFF.md**](HANDOFF.md) — the outstanding actions, what is blocked and why, and the
+  design of the follow-up PR. Written for a session with write access to `agentrust-io`.
 - [`scripts/`](scripts/) — six scripts, no dependencies beyond `rfc8785`, `cryptography` and
   `pytest`. Each exits non-zero on a finding.
 - [`scripts/jcs_minimal.py`](scripts/jcs_minimal.py) — **the independent check**, worth
