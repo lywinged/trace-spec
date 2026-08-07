@@ -1,16 +1,35 @@
 # Canonicalization boundary vectors
 
 Spec section 3.2.2 requires an RFC 8785-conformant canonicalizer and names
-`json.dumps(sort_keys=True)` as insufficient. Before this set existed, nothing
-published exercised that sentence: every record in the repository was ASCII-only with
-schema-fixed keys, and on such records every ad-hoc serializer agrees with RFC 8785
-byte-for-byte. An implementation built on ad-hoc sorting passed everything.
+`json.dumps(sort_keys=True)` as insufficient.
 
-These three records are where the agreement ends. Each is schema-valid and correctly
-signed over its RFC 8785 bytes, so a conformant verifier accepts it — and a verifier
-whose canonicalizer is any of the ad-hoc forms computes different signing bytes and
-rejects a valid record. The failure is loud, which is the point: the alternative was
-silent, because nothing else made the difference observable.
+**What already existed.** `tests/test_sign.py` carries four literal-byte known-answer
+tests over `_canonical_bytes` — non-ASCII escaping, number formatting, whitespace and
+key sorting, and a comparison against the reference library. They are good tests and
+they do catch a regression in this library. An earlier revision of this README claimed
+nothing exercised the requirement; that was written without reading them, and it was
+wrong.
+
+**What these vectors add.** Two things those tests cannot do:
+
+1. **They are portable.** A known-answer test over a private function is runnable only
+   from Python, by this package. The roadmap targets Go, Rust and TypeScript verifiers
+   for v1.0, and none of them can run `test_sign.py`. These are signed records: any
+   implementation runs them against its own verifier. Every *other* record in the
+   repository is ASCII-only with schema-fixed keys, where all serializers agree
+   byte-for-byte — so no existing record's acceptance depends on canonicalizing
+   correctly.
+2. **One of them separates key ordering, which nothing else does.**
+   `test_jcs_distinguishes_unicode_key_order_from_json_dumps` compares `{"z": 1,
+   "\U0001f600": 2}`. Under RFC 8785's UTF-16 code-unit sort and under Python's
+   code-point sort that object serializes in the *same* order — its own docstring says
+   so — and the test detects divergence through `ensure_ascii` escaping instead. A
+   canonicalizer that sorts by code point but emits raw UTF-8 passes it. Vector `03`
+   is the first object in the repository whose two orderings actually disagree.
+
+Each record is schema-valid and correctly signed over its RFC 8785 bytes, so a
+conformant verifier accepts it, and a verifier built on any ad-hoc form computes
+different signing bytes and rejects a valid record.
 
 ## The ladder
 
