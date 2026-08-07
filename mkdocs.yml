@@ -181,6 +181,7 @@ nav:
       - Verification: docs/verification.md
       - Schema Reference: docs/schema.md
       - Conformance Method: docs/conformance-method.md
+      - Normative Crosswalk: docs/normative-crosswalk.md
       - Glossary: docs/glossary.md
   - Tutorials:
       - Sign your first trust record: docs/tutorials/signing-your-first-trust-record.md
