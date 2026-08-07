@@ -1,6 +1,6 @@
 {
-  "name": "downgrade-disclosed",
-  "description": "The verifier declares support for an older profile as well, and the record uses it. Conformant, because the fallback is visible: the statement carries the full accepted set and marks the run as downgraded. The older profile is deliberately not the v0.1 identifier, which no accepted set may contain (see vector 08).",
+  "name": "dual-accept-configuration-refused",
+  "description": "A verifier configured to accept the v0.1 identifier alongside v0.2, presented with a correctly signed v0.1 record \u2014 the one case disclosed downgrade cannot save. The spec's cutover is cutover, not coexistence: the v0.1 identifier lives on a domain the project does not own, and a v0.2 verifier MUST NOT accept both, whatever its configuration claims. The configuration itself is the non-conformant object; the observable requirement is that no record verifies under it.",
   "profile": "trace.verifier_compatibility.proposal.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#116",
@@ -9,7 +9,7 @@
   "verifier": {
     "accepted_profiles": [
       "tag:agentrust-io.com,2026:trace-v0.2",
-      "tag:example.com,2025:trace-v0.0"
+      "tag:agentrust.io,2026:trace-v0.1"
     ],
     "verification_time": 1785000100,
     "check_freshness": false
@@ -20,7 +20,7 @@
     "x": "S9f_IqfsGG7jIzI7brZ7VVXCyF-_1jj_Guc1ynPKpuI"
   },
   "record": {
-    "eat_profile": "tag:example.com,2025:trace-v0.0",
+    "eat_profile": "tag:agentrust.io,2026:trace-v0.1",
     "iat": 1785000000,
     "subject": "spiffe://factory.example/agent/payments/prod",
     "model": {
@@ -52,18 +52,11 @@
         "x": "S9f_IqfsGG7jIzI7brZ7VVXCyF-_1jj_Guc1ynPKpuI"
       }
     },
-    "signature": "1yZ0TWLEUUJU5bSfObqxN4IOxNTb2QPbmZydwC6a5rep1ha-TgY1wJ800_5DG6-43eMbzADvv30Dv9ictmDQAQ"
+    "signature": "5eFnOBBJdxfftJ48ARZ-0z3fjoTyF-auFXWIhZiiZmh_vfEs_oCJUsXJ1UNQAYO6QxxA5NaWj1keAGFvSfdhBg"
   },
   "expected": {
-    "outcome": "verified",
-    "failure": null,
-    "statement": {
-      "profile": "tag:example.com,2025:trace-v0.0",
-      "accepted_profiles": [
-        "tag:agentrust-io.com,2026:trace-v0.2",
-        "tag:example.com,2025:trace-v0.0"
-      ],
-      "downgraded": true
-    }
+    "outcome": "refused",
+    "failure": "superseded_profile_in_accepted_set",
+    "statement": null
   }
 }

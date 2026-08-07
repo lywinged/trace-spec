@@ -21,7 +21,7 @@ import rfc8785
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agentrust_trace.models import TRACE_PROFILE_V0_2
+from agentrust_trace.models import TRACE_PROFILE_V0_1, TRACE_PROFILE_V0_2
 
 DEFAULT_ACCEPTED_PROFILES: tuple[str, ...] = (TRACE_PROFILE_V0_2,)
 """Profile URIs ``verify_record`` accepts unless the caller declares another set.
@@ -326,8 +326,10 @@ def verify_record(
         "the signature checks out" says nothing about whether this code implements
         the semantics the record was written under. `spec/trace-v0.2.md` requires
         exactly this of a v0.2 verifier, and forbids accepting the v0.1 identifier
-        alongside it — adding ``TRACE_PROFILE_V0_1`` to this set produces a verifier
-        that is not v0.2-conformant.
+        alongside it — passing a set containing ``TRACE_PROFILE_V0_1`` raises
+        ``ValueError`` before any record is examined, so the dual-accepting verifier
+        the cutover forbids cannot be configured here at all. Declared downgrade to
+        other, legitimately owned older profiles remains representable.
 
         The profile is read before the signature is checked, so the refusal is cheap;
         a record that returns successfully has had its profile covered by the verified
@@ -372,6 +374,14 @@ def verify_record(
         raise ValueError(
             "accepted_profiles is empty: a verifier that declares no supported profile "
             "can verify nothing. Pass DEFAULT_ACCEPTED_PROFILES or an explicit set."
+        )
+    if TRACE_PROFILE_V0_1 in accepted:
+        raise ValueError(
+            f"accepted_profiles contains the superseded v0.1 identifier "
+            f"{TRACE_PROFILE_V0_1!r}. The v0.2 cutover is cutover, not coexistence: a "
+            "dual-accepting verifier lets records minted under a domain the project "
+            "does not own keep passing as conformant, which is the thing the cutover "
+            "exists to end. Remove the v0.1 tag from the set."
         )
     profile = record.get("eat_profile")
     if not isinstance(profile, str) or not profile:

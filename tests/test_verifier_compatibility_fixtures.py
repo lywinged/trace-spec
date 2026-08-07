@@ -29,7 +29,10 @@ FAILURE_MARKERS = {
     "profile_not_accepted": "not in this verifier's accepted set",
     "profile_absent": "no 'eat_profile'",
     "no_accepted_profiles": "accepted_profiles is empty",
+    "superseded_profile_in_accepted_set": "superseded v0.1 identifier",
 }
+
+V0_1 = "tag:agentrust.io,2026:trace-v0.1"
 
 FIXTURE_PATHS = sorted(FIXTURE_DIR.glob("*.json"))
 
@@ -47,6 +50,7 @@ def test_vector_set_is_complete() -> None:
         "05-downgrade-silent-is-impossible.json",
         "06-empty-accepted-set-refused.json",
         "07-profile-absent-refused.json",
+        "08-dual-accept-configuration-refused.json",
     ]
 
 
@@ -107,13 +111,17 @@ def test_every_fixture_signature_is_genuine() -> None:
         fixture = _load(path)
         record = fixture["record"]
         profile = record.get("eat_profile")
-        accepted = [profile] if profile else []
-        if not accepted:
-            continue  # 07 has no profile; its signature is covered below
+        # Records this library refuses on configuration alone — no profile, or the
+        # superseded v0.1 identifier, which no accepted set may contain — cannot have
+        # their signatures checked through verify_record at all. Every record in this
+        # directory, including those, is re-verified through an independent
+        # cryptographic path by test_fixture_signatures_independent.py.
+        if not profile or profile == V0_1:
+            continue
         # Accept whatever this record carries, so only the signature can fail here.
         verify_record(
             record,
             fixture["trusted_key"],
             max_age_seconds=None,
-            accepted_profiles=accepted,
+            accepted_profiles=[profile],
         )

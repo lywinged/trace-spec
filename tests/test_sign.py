@@ -521,6 +521,28 @@ def test_vector_superseded_v0_1_profile_is_refused():
     )
 
 
+def test_dual_accept_configuration_is_unrepresentable():
+    """spec/trace-v0.2.md: a v0.2 verifier MUST NOT accept both identifiers.
+
+    Enforced at configuration, not per record: a set containing the v0.1 tag is
+    refused before any record is examined, so the dual-accepting verifier the
+    cutover forbids cannot be built from this library at all — even when the record
+    presented is a perfectly good v0.2 one.
+    """
+    record, jwk = _record_with_profile(TRACE_PROFILE_V0_2)
+
+    with pytest.raises(ValueError, match="superseded v0.1 identifier"):
+        verify_record(
+            record,
+            jwk,
+            accepted_profiles=(TRACE_PROFILE_V0_2, TRACE_PROFILE_V0_1),
+        )
+
+    v01_record, v01_jwk = _record_with_profile(TRACE_PROFILE_V0_1)
+    with pytest.raises(ValueError, match="superseded v0.1 identifier"):
+        verify_record(v01_record, v01_jwk, accepted_profiles=(TRACE_PROFILE_V0_1,))
+
+
 def test_vector_known_version_verifies_and_echoes_the_profile():
     """Vector 2: a supported version verifies, and the statement names it."""
     record, jwk = _record_with_profile(TRACE_PROFILE_V0_2)

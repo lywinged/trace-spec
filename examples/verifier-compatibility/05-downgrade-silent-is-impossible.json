@@ -19,7 +19,7 @@
     "x": "S9f_IqfsGG7jIzI7brZ7VVXCyF-_1jj_Guc1ynPKpuI"
   },
   "record": {
-    "eat_profile": "tag:agentrust.io,2026:trace-v0.1",
+    "eat_profile": "tag:example.com,2025:trace-v0.0",
     "iat": 1785000000,
     "subject": "spiffe://factory.example/agent/payments/prod",
     "model": {
@@ -51,7 +51,7 @@
         "x": "S9f_IqfsGG7jIzI7brZ7VVXCyF-_1jj_Guc1ynPKpuI"
       }
     },
-    "signature": "5eFnOBBJdxfftJ48ARZ-0z3fjoTyF-auFXWIhZiiZmh_vfEs_oCJUsXJ1UNQAYO6QxxA5NaWj1keAGFvSfdhBg"
+    "signature": "1yZ0TWLEUUJU5bSfObqxN4IOxNTb2QPbmZydwC6a5rep1ha-TgY1wJ800_5DG6-43eMbzADvv30Dv9ictmDQAQ"
   },
   "expected": {
     "outcome": "refused",

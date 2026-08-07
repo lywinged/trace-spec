@@ -25,6 +25,11 @@ PROFILE = "trace.verifier_compatibility.proposal.v0"
 V0_2 = "tag:agentrust-io.com,2026:trace-v0.2"
 V0_1 = "tag:agentrust.io,2026:trace-v0.1"
 FUTURE = "tag:agentrust-io.com,2031:trace-v9.9"
+# The downgrade vectors need an older profile a verifier may legitimately declare.
+# That cannot be the real v0.1 identifier: the spec's cutover forbids a v0.2 verifier
+# from accepting it under any configuration, so a downgrade vector built on v0.1
+# encodes a non-conformant verifier — which an earlier revision of vector 04 did.
+OLDER = "tag:example.com,2025:trace-v0.0"
 
 SEED = hashlib.sha256(b"trace-spec#116 verifier-compatibility fixture key").digest()
 KEY = Ed25519PrivateKey.from_private_bytes(SEED)
@@ -160,15 +165,16 @@ def main() -> None:
                 "The verifier declares support for an older profile as well, and the "
                 "record uses it. Conformant, because the fallback is visible: the "
                 "statement carries the full accepted set and marks the run as "
-                "downgraded.",
-                record_profile=V0_1,
-                accepted_profiles=[V0_2, V0_1],
+                "downgraded. The older profile is deliberately not the v0.1 "
+                "identifier, which no accepted set may contain (see vector 08).",
+                record_profile=OLDER,
+                accepted_profiles=[V0_2, OLDER],
                 expected={
                     "outcome": "verified",
                     "failure": None,
                     "statement": {
-                        "profile": V0_1,
-                        "accepted_profiles": [V0_2, V0_1],
+                        "profile": OLDER,
+                        "accepted_profiles": [V0_2, OLDER],
                         "downgraded": True,
                     },
                 },
@@ -182,7 +188,7 @@ def main() -> None:
                 "older profile. There must be no outcome in which verification "
                 "succeeds under a profile absent from the accepted set: silent "
                 "fallback is the failure this vector exists to forbid.",
-                record_profile=V0_1,
+                record_profile=OLDER,
                 accepted_profiles=[V0_2],
                 expected={
                     "outcome": "refused",
@@ -202,6 +208,27 @@ def main() -> None:
                 expected={
                     "outcome": "refused",
                     "failure": "no_accepted_profiles",
+                    "statement": None,
+                },
+            ),
+        ),
+        (
+            "08-dual-accept-configuration-refused.json",
+            fixture(
+                "dual-accept-configuration-refused",
+                "A verifier configured to accept the v0.1 identifier alongside v0.2, "
+                "presented with a correctly signed v0.1 record — the one case "
+                "disclosed downgrade cannot save. The spec's cutover is cutover, not "
+                "coexistence: the v0.1 identifier lives on a domain the project does "
+                "not own, and a v0.2 verifier MUST NOT accept both, whatever its "
+                "configuration claims. The configuration itself is the non-conformant "
+                "object; the observable requirement is that no record verifies under "
+                "it.",
+                record_profile=V0_1,
+                accepted_profiles=[V0_2, V0_1],
+                expected={
+                    "outcome": "refused",
+                    "failure": "superseded_profile_in_accepted_set",
                     "statement": None,
                 },
             ),

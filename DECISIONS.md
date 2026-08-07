@@ -7,6 +7,37 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-07 — The cutover is enforced, and vector 04 no longer contradicts it
+
+**Recorded by:** Claude (Fable 5)
+**Decision-maker:** Louie Lu
+**Status:** DECIDED and applied
+
+The spec's cutover paragraph is accepted normative text: a v0.2 verifier MUST reject
+the v0.1 identifier and MUST NOT accept both. Two things in this repository disagreed
+with it, and both were ours.
+
+1. **`verify_record` executed the forbidden configuration.** Its docstring said that
+   adding `TRACE_PROFILE_V0_1` to `accepted_profiles` "produces a verifier that is not
+   v0.2-conformant" — documented, and then honored: the caller who did it got a
+   verifier that accepts v0.1 records. Now the set itself is refused with `ValueError`
+   before any record is read. The non-conformant verifier is unrepresentable, in the
+   same way silent downgrade already was. Removing the guard fails two tests.
+
+2. **Vector `04-downgrade-disclosed` encoded that forbidden verifier as a positive
+   case.** It declared `[v0.2, v0.1]` and expected a v0.1 record to verify with the
+   downgrade disclosed. Disclosure does not license what the cutover forbids. The
+   vector now downgrades to a fictional `tag:example.com,2025:trace-v0.0` profile —
+   the same instance `test_sign.py` always used, which is how the library tests stayed
+   clean while the portable vectors did not. Vector 05 follows for narrative
+   consistency, and a new vector 08 pins the dual-accept refusal itself.
+
+Scope note: the downgrade-disclosure design of #116 is unchanged for legitimately
+owned older profiles. What changed is only that v0.1 can never be the older profile,
+because the spec says exactly that and the point of the vectors is to encode the spec.
+
+---
+
 ## 2026-08-07 — An unknown issuer key yields "unverified", not "invalid"
 
 **Recorded by:** Claude (Fable 5)

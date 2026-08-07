@@ -23,10 +23,11 @@ silent.
 | `01-known-version-verified.json` | verified | The statement names the profile verification ran under. |
 | `02-unknown-version-refused.json` | refused | A future profile is refused, not best-effort verified. |
 | `03-superseded-version-refused.json` | refused | The v0.1 identifier, which `spec/trace-v0.2.md` requires a v0.2 verifier to reject. |
-| `04-downgrade-disclosed.json` | verified | Falling back to an older profile is conformant when the accepted set shows it. |
+| `04-downgrade-disclosed.json` | verified | Falling back to an older profile is conformant when the accepted set shows it. The older profile is a fictional `tag:example.com` one — deliberately not v0.1, which no accepted set may contain. |
 | `05-downgrade-silent-is-impossible.json` | refused | The same record where the older profile was never declared. Silent fallback has no outcome. |
 | `06-empty-accepted-set-refused.json` | refused | An empty set means "nothing", never "anything". |
 | `07-profile-absent-refused.json` | refused | A missing profile cannot be supplied by assumption. |
+| `08-dual-accept-configuration-refused.json` | refused | A verifier declaring both v0.2 and v0.1, given a correctly signed v0.1 record. The spec's cutover forbids the configuration itself ("MUST NOT accept both"); the observable requirement is that nothing verifies under it. An earlier revision of vector 04 used v0.1 as its downgrade target and thereby encoded exactly this non-conformant verifier as a positive case. |
 
 **Every record in the set is correctly signed.** These vectors never ask whether a
 signature checks out; they ask whether a verifier implements the semantics the record
