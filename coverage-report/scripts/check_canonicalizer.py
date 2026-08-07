@@ -36,6 +36,14 @@ TRACE_SPEC = Path(
 )
 EXAMPLES = TRACE_SPEC / "examples"
 
+if not EXAMPLES.is_dir():
+    sys.exit(
+        f"corpus not found: {EXAMPLES}\n"
+        "Pass the trace-spec checkout as argv[1] or set TRACE_SPEC. Exiting non-zero "
+        "rather than comparing nothing: a differential check that reports success over "
+        "an empty corpus is the failure mode this script exists to catch."
+    )
+
 
 def _b64url(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))

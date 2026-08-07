@@ -1,29 +1,42 @@
 """Re-verify every fixture signature through a path that shares no code with them.
 
 A green conformance run only proves that the fixtures and the checker agree, and both
-were written by the same hand in the same sitting. This module imports nothing from
-`agentrust_trace` and reuses no helper from the other test modules: it walks the
-fixture directories, rebuilds each signing input from the JSON, and verifies with
-`cryptography` directly.
+were written by the same hand in the same sitting. This module walks the fixture
+directories, rebuilds each signing input from the JSON, and verifies with `cryptography`
+directly, importing nothing from `agentrust_trace` and reusing no helper from the other
+test modules.
 
-That makes one class of failure detectable that a self-consistent suite cannot see: a
-shared helper that canonicalizes or decodes wrongly, and fixtures generated through the
-same helper, which agree with each other and with nothing else in the world.
+**Correction.** An earlier revision claimed independence while calling `rfc8785` — the
+same canonicalizer the fixture generators call. A defect in that library would have been
+invisible to both sides, so the one class of failure this module exists to catch was
+precisely the one it could not see. The claim was true about the code it did not import
+and false about the code it did.
+
+It now canonicalizes through `coverage-report/scripts/jcs_minimal.py`, a second RFC 8785
+serializer written from the RFC text with no dependencies. `check_canonicalizer.py`
+compares the two over the whole corpus; this module uses only the independent one, so a
+divergence surfaces here as a signature failure rather than as silent agreement.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
-import rfc8785
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-EXAMPLES = Path(__file__).parent.parent / "examples"
+REPO_ROOT = Path(__file__).parent.parent
+EXAMPLES = REPO_ROOT / "examples"
+
+# Deliberately not `rfc8785`: that is what the generators use, and a shared defect
+# would be invisible to both sides. See the module docstring.
+sys.path.insert(0, str(REPO_ROOT / "coverage-report" / "scripts"))
+import jcs_minimal  # noqa: E402
 
 
 def _b64url(value: str) -> bytes:
@@ -34,7 +47,7 @@ def _verify(signed: dict[str, Any], jwk: dict[str, str]) -> None:
     """Verify `signed["signature"]` over the JCS bytes of everything else."""
     assert jwk["kty"] == "OKP" and jwk["crv"] == "Ed25519"
     key = Ed25519PublicKey.from_public_bytes(_b64url(jwk["x"]))
-    body = rfc8785.dumps({k: v for k, v in signed.items() if k != "signature"})
+    body = jcs_minimal.dumps({k: v for k, v in signed.items() if k != "signature"})
     key.verify(_b64url(signed["signature"]), body)
 
 
