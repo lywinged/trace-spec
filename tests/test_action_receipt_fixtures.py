@@ -72,10 +72,14 @@ def _verify_gap_disclosure(
     """
     chain = fixture["context"]["chain"]
     failures: list[str] = []
+    warnings: list[str] = []
 
     trusted_jwk = fixture["trusted_issuer_keys"].get(disclosure["issuer_key_id"])
     if trusted_jwk is None:
-        failures.append("disclosure_key_untrusted")
+        # Spec section 3.3.1: evidence whose issuer key is unknown to the verifier is
+        # unverified, not invalid. An unpinned key is an inability to check, not
+        # evidence of forgery, so this is an advisory rather than a failure.
+        warnings.append("disclosure_key_unknown")
     else:
         try:
             _verify_signature(disclosure, trusted_jwk)
@@ -116,7 +120,18 @@ def _verify_gap_disclosure(
             status="receipt_invalid",
             controller_outcome="unknown",
             failures=failures,
-            warnings=[],
+            warnings=warnings,
+        )
+
+    if trusted_jwk is None:
+        # No positive defect, and no verified signature either: the disclosure confers
+        # nothing and proves nothing. It does not count as a properly disclosed gap —
+        # that status requires a signature the verifier actually checked.
+        return ReceiptResult(
+            status="gap_disclosure_unverified",
+            controller_outcome="unknown",
+            failures=[],
+            warnings=warnings,
         )
 
     # Coverage is structural under the splice model: the chain is linear and unbroken,
@@ -169,7 +184,11 @@ def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
 
     trusted_jwk = fixture["trusted_issuer_keys"].get(receipt["issuer_key_id"])
     if trusted_jwk is None:
-        failures.append("issuer_key_untrusted")
+        # Spec section 3.3.1: a receipt whose issuer key is unknown to the verifier is
+        # unverified, not invalid. "Invalid" would claim evidence of a defect that an
+        # unpinned key does not provide; the structural checks below still run, and any
+        # of them failing is positive evidence that does make the receipt invalid.
+        warnings.append("issuer_key_unknown")
     else:
         try:
             _verify_signature(receipt, trusted_jwk)
@@ -205,6 +224,18 @@ def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
             warnings=warnings,
         )
 
+    if trusted_jwk is None:
+        # Nothing failed, but nothing was signed by a key the verifier could check
+        # either. The receipt confers no trust and proves no wrongdoing, and the
+        # controller outcome stays unknown because the evidence is only as good as
+        # the unverified receipt that binds it.
+        return ReceiptResult(
+            status="receipt_unverified",
+            controller_outcome="unknown",
+            failures=[],
+            warnings=warnings,
+        )
+
     status = "receipt_valid_accepted" if decision == "accepted" else "receipt_valid_rejected"
     return ReceiptResult(
         status=status,
@@ -234,7 +265,7 @@ def test_fixture_set_is_complete() -> None:
         "13-gap-disclosure-contradicted.json",
         "14-gap-disclosure-foreign-key.json",
         "15-gap-disclosed-parent-key-null-estimate.json",
-        "16-gap-disclosure-untrusted-key.json",
+        "16-gap-disclosure-unknown-key.json",
         "17-gap-disclosure-tampered.json",
         # 18-24 close the receipt rules that had no vector at all. Each was a check a
         # conforming implementation could have omitted entirely while passing this
@@ -243,7 +274,7 @@ def test_fixture_set_is_complete() -> None:
         "19-call-id-mismatch.json",
         "20-session-id-mismatch.json",
         "21-evidence-hash-mismatch.json",
-        "22-receipt-issuer-key-untrusted.json",
+        "22-receipt-issuer-key-unknown.json",
         "23-receipt-from-future.json",
         "24-decision-not-in-enum.json",
     ]

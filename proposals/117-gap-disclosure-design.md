@@ -190,3 +190,22 @@ recorded here rather than left for someone to find.
 - **`receipt_gap_disclosed` as both a status and a warning** is how the current fixtures
   encode it. Whether the outcome should also surface as a warning is a presentation
   question this note does not settle.
+
+## Amendment, 2026-08-07: an unverifiable disclosure is not an invalid one
+
+The fixtures originally treated a disclosure signed by a key the verifier does not hold
+as `receipt_invalid` with a `disclosure_key_untrusted` failure. That contradicted the
+spec's own distinction (section 3.3.1: evidence whose issuer key is unknown to the
+verifier is *unverified, not invalid*), and the contradiction was ours, found by
+surveying the spec's normative statements against what enforces them.
+
+The resolved reading: an unpinned key is an inability to check, not evidence of forgery.
+Fixture 16 now expects a sixth outcome, `gap_disclosure_unverified`, with a
+`disclosure_key_unknown` advisory and no failures. It does **not** count as a properly
+disclosed gap — `receipt_gap_disclosed` requires a signature the verifier actually
+checked — and it accuses no one. The structural checks (issuer binding, both splice
+seals, contradiction) still run first; any of them failing is positive evidence and
+yields `receipt_invalid` regardless of whether the key is held.
+
+The receipt-side twin (`issuer_key_unknown` → `receipt_unverified`, fixture 22) follows
+the same reasoning.

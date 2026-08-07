@@ -105,15 +105,17 @@ Seven rules in the receipt verifier had no vector at all:
 | `call_id_mismatch` | Checking that the receipt is bound to *this* call |
 | `session_id_mismatch` | Checking that it is bound to *this* session |
 | `evidence_hash_mismatch` | Recomputing the evidence digest, so a swapped evidence body passes |
-| `issuer_key_untrusted` | Checking the signing key against a pinned set at all |
+| `issuer_key_unknown` | Consulting the pinned key set at all |
 | `receipt_from_future` | Rejecting a receipt issued after the verification time |
 | `decision_invalid` | Refusing to read an unrecognised decision verb as accept or reject |
 
 Each is a check a conforming implementation could have omitted entirely while passing
 the published suite. Two are load-bearing for the trust model rather than merely tidy:
-without `issuer_key_untrusted` a receipt authenticates itself, and without
-`evidence_hash_mismatch` the signature covers a digest whose document may have been
-replaced.
+without `issuer_key_unknown` a receipt authenticates itself — a signature verifies
+against whatever key it names, and only the pinned set says which keys the verifier can
+check, so a receipt under an unpinned key is surfaced as unverified rather than valid or
+invalid — and without `evidence_hash_mismatch` the signature covers a digest whose
+document may have been replaced.
 
 ## 5. The checker's own false positives
 

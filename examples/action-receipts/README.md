@@ -134,7 +134,7 @@ to, as distinct from silence.
 | `13-gap-disclosure-contradicted.json` | `receipt_invalid` | Implies elements are absent that are present. |
 | `14-gap-disclosure-foreign-key.json` | `receipt_invalid` | Signed by a trusted key that is neither the linked element's key nor an ancestor. |
 | `15-gap-disclosed-parent-key-null-estimate.json` | `receipt_gap_disclosed` | Signed by the hierarchical parent because the crash took the session key; `receipts_lost_estimate` is null. Reports a run of three consecutive disclosures. |
-| `16-gap-disclosure-untrusted-key.json` | `receipt_invalid` | The right key by chain position, not held by the verifier. |
+| `16-gap-disclosure-unknown-key.json` | `gap_disclosure_unverified` | The right key by chain position, not held by the verifier. Unverifiable is not invalid (spec §3.3.1): the disclosure confers nothing and accuses no one, surfaced with a `disclosure_key_unknown` advisory. |
 | `17-gap-disclosure-tampered.json` | `receipt_invalid` | Altered after signing. |
 
 `gen_gap_disclosure_vectors.py` regenerates this range byte-for-byte.
@@ -182,15 +182,19 @@ regenerates byte-for-byte. Only public JWKs appear in the files.
 | `19-call-id-mismatch.json` | `call_id_mismatch` | Checking the receipt is bound to *this* call |
 | `20-session-id-mismatch.json` | `session_id_mismatch` | Checking it is bound to *this* session |
 | `21-evidence-hash-mismatch.json` | `evidence_hash_mismatch` | Recomputing the evidence digest |
-| `22-receipt-issuer-key-untrusted.json` | `issuer_key_untrusted` | Checking the signing key against a pinned set at all |
+| `22-receipt-issuer-key-unknown.json` | `issuer_key_unknown` | Distinguishing a key it cannot check from a check that failed |
 | `23-receipt-from-future.json` | `receipt_from_future` | Rejecting a receipt issued after the verification time |
 | `24-decision-not-in-enum.json` | `decision_invalid` | Refusing to read an unknown verb as accept or reject |
 
 Two are load-bearing for the trust model rather than tidiness. Without
-`issuer_key_untrusted` a receipt authenticates itself: a signature verifies against
-whatever key it names, and only a pinned set decides whether that key was ever entitled
-to speak. Without `evidence_hash_mismatch` the signature covers a digest whose document
-can be swapped, because the receipt signs `evidence_hash` and not the evidence body.
+`issuer_key_unknown` a receipt authenticates itself: a signature verifies against
+whatever key it names, and only a pinned set decides which keys the verifier can check
+at all. The outcome is `receipt_unverified`, not `receipt_invalid` — an unpinned key is
+an inability to check, not evidence of forgery (spec §3.3.1) — but a verifier that never
+consults its pinned set would report such a receipt as fully valid, and that is the
+implementation this vector distinguishes. Without `evidence_hash_mismatch` the signature
+covers a digest whose document can be swapped, because the receipt signs `evidence_hash`
+and not the evidence body.
 
 They were found by walking the verifier's source for every failure code it can emit and
 comparing that against the codes the fixtures expect — not by reading the set and

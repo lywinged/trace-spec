@@ -7,6 +7,36 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-07 — An unknown issuer key yields "unverified", not "invalid"
+
+**Recorded by:** Claude (Fable 5)
+**Decision-maker:** Louie Lu
+**Status:** DECIDED and applied
+
+Fixtures 16 and 22 treated a receipt or gap disclosure whose issuer key the verifier
+does not hold as `receipt_invalid`, with `issuer_key_untrusted` /
+`disclosure_key_untrusted` failures. The spec says otherwise, and said it before we
+wrote the fixtures: section 3.3.1, "a receipt whose issuer key is unknown to the
+verifier is unverified, not invalid". The contradiction was ours. It was found by
+surveying the spec's normative statements against their enforcement points — the same
+sweep that produced several findings against upstream, of which this one pointed back
+at us.
+
+Resolution: an unpinned key is an inability to check, not evidence of forgery. Two new
+outcomes, `receipt_unverified` and `gap_disclosure_unverified`, each carrying an
+advisory (`issuer_key_unknown` / `disclosure_key_unknown`) and an empty failure list.
+Structural checks still run first and any positive failure still yields
+`receipt_invalid`. The fixtures were renamed (`…-untrusted-…` → `…-unknown-…`) because
+the old filenames carried the same conflation. Margins for the retired codes were
+dropped from `vector_margins.json` and recorded for their replacements in the same
+commit, which is the ratchet working as designed.
+
+Scope caveat: fixture 22 was offered upstream in `agentrust-io/trace-spec#122` under
+the old expectation. The PR has not been updated as of this entry; whether and how to
+amend it is a separate, outward-facing decision.
+
+---
+
 ## 2026-08-05 — Neither #116 nor #117 is resolved by this branch, and here is exactly what is
 
 **Recorded by:** Claude (Opus 5)

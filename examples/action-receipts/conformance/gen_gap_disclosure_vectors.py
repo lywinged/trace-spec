@@ -7,7 +7,6 @@ proposals/117-gap-disclosure-design.md. Deterministic keys; public JWKs only.
 from __future__ import annotations
 
 import base64
-import copy
 import hashlib
 import json
 from pathlib import Path
@@ -159,6 +158,17 @@ def bad(*failures: str) -> dict[str, Any]:
     }
 
 
+def unverified(*advisories: str) -> dict[str, Any]:
+    """Unverifiable is not invalid (spec section 3.3.1): advisory, no failures."""
+    return {
+        "status": "gap_disclosure_unverified",
+        "controller_outcome": "unknown",
+        "failures": [],
+        "warnings": list(advisories),
+        "consecutive_disclosures": 1,
+    }
+
+
 def main() -> None:
     out: list[tuple[str, dict[str, Any]]] = []
 
@@ -212,12 +222,15 @@ def main() -> None:
               "receipts_lost_estimate": None}, PARENT),
         ok(consecutive=3), base_context(consecutive_disclosures=3))))
 
-    out.append(("16-gap-disclosure-untrusted-key.json", fixture(
-        "gap-disclosure-untrusted-key",
+    out.append(("16-gap-disclosure-unknown-key.json", fixture(
+        "gap-disclosure-unknown-key",
         "The named key is the one that signed the linked element, but the verifier "
-        "does not hold it. Chain position does not confer trust.",
+        "does not hold it. Chain position does not confer trust — and the verifier's "
+        "ignorance does not prove forgery. Unverifiable is not invalid (spec "
+        "section 3.3.1): the disclosure is surfaced as unverified with an advisory, "
+        "conferring nothing and accusing no one.",
         sign({**base_disclosure(), "issuer_key_id": f"{ISSUER}#ed25519-2027q1"}, KEY),
-        bad("disclosure_key_untrusted"),
+        unverified("disclosure_key_unknown"),
         # The chain names the same key, so issuer binding is satisfied and only trust
         # fails. Otherwise this fixture would fire two rules and stop isolating one.
         base_context(predecessor_issuer_key_id=f"{ISSUER}#ed25519-2027q1"))))

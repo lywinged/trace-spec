@@ -94,13 +94,14 @@ def test_gap_disclosure_signature_independently(path: Path) -> None:
 
     jwk = fixture["trusted_issuer_keys"].get(disclosure["issuer_key_id"])
     expected = fixture["expected"]
-    deliberately_bad = {"disclosure_signature_invalid", "disclosure_key_untrusted"}
-    is_negative = bool(deliberately_bad & set(expected.get("failures", [])))
+    is_negative = "disclosure_signature_invalid" in expected.get("failures", [])
 
     if jwk is None:
-        assert is_negative, (
-            f"{path.name}: issuer key is not pinned, but the fixture does not expect a "
-            "key or signature failure"
+        # An unpinned key cannot be checked here either. The fixture must say so:
+        # unverified with the advisory, not a failure (spec section 3.3.1).
+        assert "disclosure_key_unknown" in expected.get("warnings", []), (
+            f"{path.name}: issuer key is not pinned, but the fixture does not expect "
+            "the disclosure_key_unknown advisory"
         )
         return
 
@@ -133,13 +134,14 @@ def test_receipt_signature_independently(path: Path) -> None:
     fixture = json.loads(path.read_text(encoding="utf-8"))
     receipt = fixture["receipt"]
     jwk = fixture["trusted_issuer_keys"].get(receipt["issuer_key_id"])
-    failures = set(fixture["expected"].get("failures", []))
-    is_negative = bool({"signature_or_key_mismatch", "issuer_key_untrusted"} & failures)
+    is_negative = "signature_or_key_mismatch" in fixture["expected"].get("failures", [])
 
     if jwk is None:
-        assert is_negative, (
-            f"{path.name}: receipt key is not pinned, but no key or signature failure "
-            "is expected"
+        # An unpinned key cannot be checked here either. The fixture must say so:
+        # unverified with the advisory, not a failure (spec section 3.3.1).
+        assert "issuer_key_unknown" in fixture["expected"].get("warnings", []), (
+            f"{path.name}: receipt key is not pinned, but the fixture does not expect "
+            "the issuer_key_unknown advisory"
         )
         return
 

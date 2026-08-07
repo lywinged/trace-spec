@@ -1,6 +1,6 @@
 {
-  "name": "gap-disclosure-untrusted-key",
-  "description": "The named key is the one that signed the linked element, but the verifier does not hold it. Chain position does not confer trust.",
+  "name": "gap-disclosure-unknown-key",
+  "description": "The named key is the one that signed the linked element, but the verifier does not hold it. Chain position does not confer trust \u2014 and the verifier's ignorance does not prove forgery. Unverifiable is not invalid (spec section 3.3.1): the disclosure is surfaced as unverified with an advisory, conferring nothing and accusing no one.",
   "profile": "trace.action_receipt.conformance.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#117",
@@ -60,12 +60,12 @@
     "signature": "3OVGq6kohVs6Eg8IBse-PQyZVszCPinjTDyGwMJGlf36rMoDivcyCgGxL6c6amIGnZ6S-0icgTehZJUCPpHlCg"
   },
   "expected": {
-    "status": "receipt_invalid",
+    "status": "gap_disclosure_unverified",
     "controller_outcome": "unknown",
-    "failures": [
-      "disclosure_key_untrusted"
+    "failures": [],
+    "warnings": [
+      "disclosure_key_unknown"
     ],
-    "warnings": [],
     "consecutive_disclosures": 1
   }
 }
