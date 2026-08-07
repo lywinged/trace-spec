@@ -1,3 +1,21 @@
+> **This is a fork.** Upstream is [`agentrust-io/trace-spec`](https://github.com/agentrust-io/trace-spec).
+> Everything below this note is upstream's README, unchanged.
+>
+> This fork carries conformance and verification work that is either already offered
+> upstream or held pending review there: 35 portable conformance fixtures, a
+> mutation-based completeness suite that recovers its rule inventory from the verifier's
+> own source, and a crosswalk mapping every RFC 2119 statement in the spec to its
+> enforcement point. Offered upstream so far —
+> [#122](https://github.com/agentrust-io/trace-spec/pull/122) (rule-coverage vectors),
+> [#125](https://github.com/agentrust-io/trace-spec/pull/125) (profile cutover enforcement),
+> [#126](https://github.com/agentrust-io/trace-spec/pull/126) (RFC 8785 boundary vectors),
+> and issues [#124](https://github.com/agentrust-io/trace-spec/issues/124) /
+> [trace-tests#53](https://github.com/agentrust-io/trace-tests/issues/53) (coverage measurement).
+>
+> **Nothing in this fork is normative TRACE text, and nothing in it is endorsed by
+> upstream.** Anything under `proposals/` is an unaccepted working position; fixtures
+> encoding a proposal carry the issue number and say so.
+
 <p align="center">
   <img src="docs/assets/icon.svg" width="96" height="96" alt="TRACE"/>
 </p>
