@@ -165,12 +165,15 @@ distinguished, and the attempt to justify it failed: the estimate is unverifiabl
 construction, and its type is the schema's business. It was deleted rather than given a
 fixture, which is the outcome that check exists to force.
 
-**Open: three requirements in the draft text have no vector.** The normative draft
-requires `type` to equal `GapDisclosure/1.0`, `session_id` to match the session, and
-`cause` to be one of four values. The fixture verifier does not implement those, so the
-completeness suite cannot flag them — it only sees rules that exist. This is the class of
-gap that method does not close, stated in `docs/conformance-method.md` §6, and it is
-recorded here rather than left for someone to find.
+**Open: one requirement in the draft text has no vector.** The normative draft requires
+`type` to equal `GapDisclosure/1.0`; the fixture verifier does not implement that check,
+so the completeness suite cannot flag it — it only sees rules that exist. This is the
+class of gap the method does not close, stated in `docs/conformance-method.md` §6, and
+it is recorded here rather than left for someone to find. The other two members of this
+list resolved with the 2026-08-08 review: the `session_id` match is now the
+`disclosure_stream_mismatch` rule with two vectors, and the `cause` enum requirement was
+dropped — a vocabulary constraint on an uncorroborated field is precision without
+evidence.
 
 ## What I might have wrong
 
@@ -209,3 +212,46 @@ yields `receipt_invalid` regardless of whether the key is held.
 
 The receipt-side twin (`issuer_key_unknown` → `receipt_unverified`, fixture 22) follows
 the same reasoning.
+
+## Amendment, 2026-08-08: the #117 review, and what changed under it
+
+The [review on #117](https://github.com/agentrust-io/trace-spec/issues/117) (carloshvp)
+confirmed the splice model as the viable direction and narrowed it in five particulars.
+Each is now implemented or recorded; the fixture numbers below are the current ones,
+after the set moved to `examples/action-receipts/conformance/proposal-117/`. (Earlier
+sections and amendments keep the numbering of their day — this note is append-only, and
+the mapping is one-to-one: old `10`–`17` are now `proposal-117/01`–`08`.)
+
+> Conclusion: the revised chain-element shape is the viable direction, but the verifier
+> claim needs to stay narrower than "covers the missing range."
+
+1. **Range fields removed** — already the position of this note (§1-2); the review
+   reached it independently. Chain links suffice.
+2. **`cause` and `receipts_lost_estimate` optional and descriptive only.** The
+   normative draft had `cause` as a required four-value enum. Dropped: a vocabulary
+   constraint on a field nothing corroborates is precision without evidence. The
+   verifier conditions no outcome on either field.
+3. **Stream binding.** The disclosure carries `session_id` under its signature, and the
+   verifier now compares it against the stream under verification —
+   `disclosure_stream_mismatch`, vectors 12 and 13. Without the comparison, a
+   disclosure honestly signed for stream A is a transplantable excuse for a gap in
+   stream B. This was the one review point the fixtures did not already implement:
+   the field was present and signed, and never checked.
+4. **The successor seal** (vector 03) and **issuer binding read off the chain**
+   (vector 05) were confirmed as required, and stand.
+5. **Policy-gated acceptance, with one hard bound.** Whether `receipt_gap_disclosed`
+   is accepted stays a relying-party policy input, and no policy may read it as
+   satisfying a profile that requires independently proven completeness. The
+   disclosure proves *where* the gap sits — not that the missing receipts existed,
+   how many were lost, or that the issuer did not selectively omit them.
+
+The review also validated the current tree independently: PR #122 merged, 16 top-level
+fixtures over 14 named obligations, suite and lint passing at upstream `a817621`.
+
+Separately, the [#124 review](https://github.com/agentrust-io/trace-spec/issues/124)
+resolved where the completeness checker lives (here, not `trace-tests` — both things it
+measures are local) and re-shaped its inventory: an explicit rule registry the verifier
+consumes, mutated by named hook, in place of AST recovery. That is implemented in
+`tests/test_action_receipt_fixtures.py` / `tests/test_vector_completeness.py`, with two
+independent vectors per rule enforced under #124's independence definition. Every
+disclosure rule in this note now carries two vectors, 01-16.

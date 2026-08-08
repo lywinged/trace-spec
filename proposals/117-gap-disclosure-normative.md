@@ -39,15 +39,24 @@ evidence contributed by the emitter about itself.
 - `type`, the value `GapDisclosure/1.0`;
 - `previous_receipt_hash`, the digest of the chain element immediately preceding the gap,
   in the same form and computed the same way as on a receipt;
-- `session_id`, matching the session whose chain it belongs to;
+- `session_id`, naming the receipt stream the disclosure belongs to;
 - `issuer_key_id`, identifying the key that signed it;
-- `cause`, one of `crash`, `shutdown`, `backpressure`, `unknown`;
 - `signature`, over the canonical form of the disclosure with the signature field removed.
 
-It MAY carry `receipts_lost_estimate`. That value is an unverifiable self-report: the
-receipts it counts are absent by definition, so nothing in the chain corroborates it. A
-verifier MUST NOT treat it as established, and MUST NOT reject a disclosure solely because
-the estimate disagrees with any other evidence. It exists to be reported, not relied on.
+It MAY carry `cause` and `receipts_lost_estimate`. Both are descriptive self-reports and
+nothing more (per the [#117 review](https://github.com/agentrust-io/trace-spec/issues/117)):
+the receipts an estimate counts are absent by definition, so nothing in the chain
+corroborates either field. A verifier MUST NOT treat them as established, MUST NOT
+condition any outcome on their values, and MUST NOT reject a disclosure because either
+disagrees with other evidence. They exist to be reported, not relied on. An earlier
+draft made `cause` a required enum; a vocabulary constraint on an uncorroborated field
+is precision without evidence, and it was dropped with the review.
+
+**Stream binding.** The `session_id` is covered by the signature, and a verifier MUST
+reject a disclosure whose `session_id` does not match the receipt stream under
+verification. Without that comparison, a disclosure honestly signed for one stream is a
+transplantable excuse for a gap in any other — replay, in the position where replay is
+hardest to distinguish from recovery.
 
 **Chain binding.** A `GapDisclosure` MUST be spliced into the receipt chain at the point
 of resumption. Concretely, its `previous_receipt_hash` MUST name a chain element that is
@@ -88,19 +97,23 @@ issued to make.
 Whether `receipt_gap_disclosed` is accepted or rejected MUST be a verifier policy input,
 not implementation-defined behaviour. A relying party evaluating a payment authorisation
 and one evaluating a telemetry batch will reasonably differ, and neither should have to
-change verifier to express that.
+change verifier to express that. One bound on that policy is not negotiable: a profile
+that requires independently proven completeness of the receipt chain MUST NOT accept
+`receipt_gap_disclosed` as satisfying it. A disclosed gap is an attested absence, not a
+proof of completeness, and no policy setting may promote the former into the latter.
 
 A `GapDisclosure` that fails signature verification, is not bound into the chain from both
-directions, is signed by a key outside the permitted set, or whose claimed gap is
-contradicted by chain elements that are in fact present, MUST yield `receipt_invalid`
-rather than falling back to `receipt_missing_required`. A forged or self-contradictory
-disclosure is worse evidence than no disclosure: it is an attempt to convert silence into
-attestation, and the attempt itself is a finding.
+directions, names a session other than the stream under verification, is signed by a key
+outside the permitted set, or whose claimed gap is contradicted by chain elements that are
+in fact present, MUST yield `receipt_invalid` rather than falling back to
+`receipt_missing_required`. A forged, transplanted or self-contradictory disclosure is
+worse evidence than no disclosure: it is an attempt to convert silence into attestation,
+and the attempt itself is a finding.
 
 **Reporting.** A verification result MUST report each disclosed gap individually, carrying
-at minimum the linked predecessor, the cause, and the number of consecutive disclosures.
-Reducing disclosed gaps to a count or a boolean discards exactly the detail a relying
-party's policy needs.
+at minimum the linked predecessor, the number of consecutive disclosures, and the
+`cause` when one was supplied. Reducing disclosed gaps to a count or a boolean discards
+exactly the detail a relying party's policy needs.
 
 ---
 
@@ -109,13 +122,18 @@ party's policy needs.
 **Departure from the issue.** #117 lists `range_start_after`, `range_end_before`, and
 `disclosed_at`. This draft has none of them. `previous_receipt_hash` is
 `range_start_after` under the name the chain already uses; the other two are the hash of a
-successor that does not exist when the disclosure is written. The conformance fixtures
-implement the issue's list, so they and this text currently disagree — deliberately, and
-recorded rather than silently reconciled.
+successor that does not exist when the disclosure is written. The
+[#117 review](https://github.com/agentrust-io/trace-spec/issues/117) reached the same
+conclusion independently — chain links suffice — and the conformance fixtures under
+`examples/action-receipts/conformance/proposal-117/` implement this draft's shape.
 
 **What a disclosed gap does not establish.** That the receipts were lost rather than
 suppressed. An emitter can drop receipts deliberately and disclose the drop; the
-disclosure makes the absence *visible and attributable*, not innocent. The text says
+disclosure makes the absence *visible and attributable*, not innocent. Nor — stated with
+the review's precision — can it establish that the missing receipts ever existed, how
+many were lost, or that the issuer did not selectively omit them. What the splice
+proves is *where* the gap sits in the chain, and nothing else; every verifier claim in
+this draft is written to stay narrower than "covers the missing range". The text says
 "negative evidence contributed by the emitter about itself" for that reason, and no
 requirement here should be read as making a disclosed gap benign.
 

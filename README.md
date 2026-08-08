@@ -1,16 +1,19 @@
 > **This is a fork.** Upstream is [`agentrust-io/trace-spec`](https://github.com/agentrust-io/trace-spec).
 > Everything below this note is upstream's README, unchanged.
 >
-> This fork carries conformance and verification work that is either already offered
-> upstream or held pending review there: 35 portable conformance fixtures, a
-> mutation-based completeness suite that recovers its rule inventory from the verifier's
-> own source, and a crosswalk mapping every RFC 2119 statement in the spec to its
-> enforcement point. Offered upstream so far —
+> This fork carries conformance and verification work ahead of upstream review. Three
+> pieces have been accepted and merged upstream —
 > [#122](https://github.com/agentrust-io/trace-spec/pull/122) (rule-coverage vectors),
 > [#125](https://github.com/agentrust-io/trace-spec/pull/125) (profile cutover enforcement),
 > [#126](https://github.com/agentrust-io/trace-spec/pull/126) (RFC 8785 boundary vectors),
-> and issues [#124](https://github.com/agentrust-io/trace-spec/issues/124) /
-> [trace-tests#53](https://github.com/agentrust-io/trace-tests/issues/53) (coverage measurement).
+> all in the 0.6.0 release, which this fork tracks. Still fork-only: portable conformance
+> fixtures with two independent vectors per verifier rule, a registry-backed completeness
+> suite that mutation-tests every rule (issues
+> [#124](https://github.com/agentrust-io/trace-spec/issues/124) /
+> [trace-tests#53](https://github.com/agentrust-io/trace-tests/issues/53)), vectors for the
+> disclosed-receipt-gap proposal
+> ([#117](https://github.com/agentrust-io/trace-spec/issues/117)), and a crosswalk mapping
+> every RFC 2119 statement in the spec to its enforcement point.
 >
 > **Nothing in this fork is normative TRACE text, and nothing in it is endorsed by
 > upstream.** Anything under `proposals/` is an unaccepted working position; fixtures

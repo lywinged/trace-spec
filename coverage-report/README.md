@@ -28,6 +28,18 @@ result than any of seven external conformance corpora measured the same way.
 **The thing to fix:** twenty of the twenty-one are held by **exactly one vector**. Complete,
 and with no margin.
 
+> **2026-08-08 — this measurement is historical, and its finding has been acted on.**
+> The report describes the tree as it stood when measured. Since then, the
+> [#124 review](https://github.com/agentrust-io/trace-spec/issues/124) reshaped the
+> instrument — the verifier now consumes an explicit rule registry and the in-tree
+> suite mutates named rule hooks, so the AST-based recovery these scripts perform no
+> longer matches the verifier's shape — and the margin finding was closed: every rule
+> now carries two independent load-bearing vectors, enforced fail-closed by
+> `tests/test_vector_completeness.py`. The scripts under `scripts/` still run against
+> the commit the report cites; `jcs_minimal.py` remains live and is imported by the
+> test suite. The report is kept as the measurement that motivated the change, not as
+> a description of the current tree.
+
 ---
 
 Prose: CC BY 4.0. Code under `scripts/`: Apache 2.0 ([`LICENSE`](LICENSE)).

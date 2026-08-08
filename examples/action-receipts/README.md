@@ -60,11 +60,16 @@ unchanged.
 The set falls in three ranges, and the distinction matters more than the numbering:
 
 - **`01`–`09`** cover the four receipt outcomes this document already describes.
-- **`10`–`17`** cover a **proposal that is still under review**, described separately
-  below. Read that section before treating any of them as settled behaviour.
-- **`18`–`24`** cover rules the verifier already applies and that nothing exercised.
-  These are not a proposal. They close gaps in behaviour this document already
-  requires.
+- **`10`–`16`** cover rules the verifier already applies and that nothing exercised
+  (merged upstream as [#122](https://github.com/agentrust-io/trace-spec/pull/122)).
+  Not a proposal: they close gaps in behaviour this document already requires.
+- **`17`–`30`** are the **second vector for every rule**
+  ([#124](https://github.com/agentrust-io/trace-spec/issues/124): two independent
+  vectors each), placed against implementation shortcuts the first set cannot detect.
+- **`proposal-117/`** holds the vectors for a **proposal that is still under review**,
+  described separately below, in its own directory with its own numbering so the
+  ranges cannot collide. Read that section before treating any of them as settled
+  behaviour.
 
 Each fixture contains:
 
@@ -105,6 +110,20 @@ three operations:
 | `14-receipt-issuer-key-unknown.json` | `receipt_unverified` with advisory | unknown | The issuer key is not in the verifier's pinned set. Unverifiable is not invalid (spec §3.3.1): no trust is conferred and no forgery is proven, surfaced as an `issuer_key_unknown` advisory. |
 | `15-receipt-from-future.json` | `receipt_invalid` | unknown | Issued after the verification time, so an upper bound on age never rejects it. |
 | `16-decision-not-in-enum.json` | `receipt_invalid` | unknown | An unrecognised decision verb, which must not read as accept or reject. |
+| `17-missing-receipt-explicit-null.json` | `receipt_missing_required` | unknown | The receipt supplied as an explicit `null`: 03's absence through a different door, misread by presence-checking implementations. |
+| `18-action-ref-tail-forged.json` | `receipt_invalid` | unknown | The declared `action_ref` matches the recomputed digest in every character but the last. |
+| `19-action-ref-mismatch-in-tail.json` | `receipt_invalid` | unknown | Receipt and action references differ only in the final character. |
+| `20-call-id-case-mismatch.json` | `receipt_invalid` | unknown | The linked call id is this call's id in a different case — a different call. |
+| `21-session-id-case-mismatch.json` | `receipt_invalid` | unknown | The session id in a different case — a different session. |
+| `22-evidence-hash-mismatch-in-tail.json` | `receipt_invalid` | unknown | The evidence hash is wrong only in its final character. |
+| `23-receipt-issuer-key-case-variant.json` | `receipt_unverified` with advisory | unknown | The right key pinned under a case-variant of the receipt's key id: not the key the receipt names. |
+| `24-receipt-signature-malformed.json` | `receipt_invalid` | unknown | Valid base64url decoding to 32 bytes — rejected by structure, where 04 needs cryptography. |
+| `25-stale-receipt-boundary.json` | `receipt_invalid` | unknown | Stale by exactly one second. |
+| `26-receipt-from-future-boundary.json` | `receipt_invalid` | unknown | Issued one second after the verification time. |
+| `27-receipt-chain-gap-in-tail.json` | `receipt_invalid` | unknown | The predecessor link is wrong only in its final character. |
+| `28-physical-completion-claim-case.json` | `receipt_invalid` | unknown | The claim `"None"`: the vocabulary word under case-normalisation, outside it as bytes. |
+| `29-same-party-self-report-rejected.json` | `receipt_valid_rejected` with warning | `rejected` | A gateway self-report on the rejected branch: issuer independence matters on both. |
+| `30-decision-case-variant.json` | `receipt_invalid` | unknown | The decision `"Accepted"`: in the vocabulary case-insensitively, outside it as bytes. |
 
 Fixtures `10`–`16` each pin down one rule that the verifier applies and that no fixture
 previously exercised. Every one was a check a conforming implementation could have
@@ -115,9 +134,20 @@ check at all; per spec §3.3.1 the outcome is `receipt_unverified`, not
 `receipt_invalid`, but a verifier that never consults its pinned set would report such
 a receipt as fully valid, which is what the vector distinguishes. Without
 `evidence_hash_mismatch` the signature covers a digest whose document may have been
-replaced. They pin their own deterministic test key, since the private half of the key
-used by `01`–`09` is not published; `gen_rule_coverage_vectors.py` regenerates them
-byte-for-byte and only public JWKs appear in the files.
+replaced.
+
+Fixtures `17`–`30` are the second, independent vector for each rule. Two vectors are
+independent when a single implementation defect causes one to pass and the other to
+fail (#124), and each pair here is split by a declared, plausible shortcut: truncated
+digest comparison, case-normalised identifier matching, clock tolerance, structural
+signature validation, presence-checking instead of null-checking. The defect that
+separates each pair is declared and enforced in
+`tests/test_vector_completeness.py::DEFECTS`; the method is described in
+[`docs/conformance-method.md`](../../docs/conformance-method.md).
+
+Everything from `10` up pins its own deterministic test key, since the private half of
+the key used by `01`–`09` is not published; `gen_rule_coverage_vectors.py` regenerates
+the range byte-for-byte and only public JWKs appear in the files.
 
 `tests/test_action_receipt_fixtures.py` recomputes each digest, verifies each
 signature against the pinned key, checks session and call binding, enforces
@@ -130,7 +160,7 @@ their own trusted issuer keys.
 
 ## Proposed: disclosed receipt gaps (under review, not accepted)
 
-> Fixtures `10`–`17` encode the mechanism proposed in
+> The fixtures under `conformance/proposal-117/` encode the mechanism proposed in
 > [agentrust-io/trace-spec#117](https://github.com/agentrust-io/trace-spec/issues/117).
 > **No normative text for it has been accepted.** They exist so the mechanism can
 > be exercised and argued about against running code rather than prose. Do not
@@ -148,16 +178,30 @@ to, as distinct from silence.
 
 | Fixture | Outcome | What it pins down |
 |---|---|---|
-| `10-gap-disclosed-valid.json` | `receipt_gap_disclosed` | A disclosure spliced into the chain: it links back to a present element, and the next element links back to it. |
-| `11-gap-disclosure-dangling-predecessor.json` | `receipt_invalid` | Links back to an element that is not in the chain. Half a splice fixes nothing in place. |
-| `12-gap-disclosure-successor-does-not-link.json` | `receipt_invalid` | The next element links past the disclosure, leaving it attached at one end. |
-| `13-gap-disclosure-contradicted.json` | `receipt_invalid` | Implies elements are absent that are present. |
-| `14-gap-disclosure-foreign-key.json` | `receipt_invalid` | Signed by a trusted key that is neither the linked element's key nor an ancestor. |
-| `15-gap-disclosed-parent-key-null-estimate.json` | `receipt_gap_disclosed` | Signed by the hierarchical parent because the crash took the session key; `receipts_lost_estimate` is null. Reports a run of three consecutive disclosures. |
-| `16-gap-disclosure-unknown-key.json` | `gap_disclosure_unverified` | The right key by chain position, not held by the verifier. Unverifiable is not invalid (spec §3.3.1): the disclosure confers nothing and accuses no one, surfaced with a `disclosure_key_unknown` advisory. |
-| `17-gap-disclosure-tampered.json` | `receipt_invalid` | Altered after signing. |
+| `01-gap-disclosed-valid.json` | `receipt_gap_disclosed` | A disclosure spliced into the chain: it links back to a present element, and the next element links back to it. |
+| `02-gap-disclosure-dangling-predecessor.json` | `receipt_invalid` | Links back to an element that is not in the chain. Half a splice fixes nothing in place. |
+| `03-gap-disclosure-successor-does-not-link.json` | `receipt_invalid` | The next element links past the disclosure, leaving it attached at one end. |
+| `04-gap-disclosure-contradicted.json` | `receipt_invalid` | Implies elements are absent that are present. |
+| `05-gap-disclosure-foreign-key.json` | `receipt_invalid` | Signed by a trusted key that is neither the linked element's key nor an ancestor. |
+| `06-gap-disclosed-parent-key-null-estimate.json` | `receipt_gap_disclosed` | Signed by the hierarchical parent because the crash took the session key; `receipts_lost_estimate` is null. Reports a run of three consecutive disclosures. |
+| `07-gap-disclosure-unknown-key.json` | `gap_disclosure_unverified` | The right key by chain position, not held by the verifier. Unverifiable is not invalid (spec §3.3.1): the disclosure confers nothing and accuses no one, surfaced with a `disclosure_key_unknown` advisory. |
+| `08-gap-disclosure-tampered.json` | `receipt_invalid` | Altered after signing. |
+| `09-gap-disclosure-key-case-variant.json` | `gap_disclosure_unverified` | The right public key pinned under a case-variant of the disclosure's key id: not the key it names. |
+| `10-gap-disclosure-signature-malformed.json` | `receipt_invalid` | Valid base64url of the wrong length — structure rejects it, where 08 needs cryptography. |
+| `11-gap-disclosure-confusable-ancestor-key.json` | `receipt_invalid` | A trusted key registered under a case-variant of the permitted ancestor's id: a confusable, not the ancestor. |
+| `12-gap-disclosure-replayed-stream.json` | `receipt_invalid` | Honestly signed for a different session, presented against this one. Stream binding refuses the transplant. |
+| `13-gap-disclosure-stream-case-variant.json` | `receipt_invalid` | The session id under the signature is this session's id in a different case. |
+| `14-gap-disclosure-predecessor-link-tail.json` | `receipt_invalid` | The predecessor link is wrong only in its final character. |
+| `15-gap-disclosure-seal-tail-mismatch.json` | `receipt_invalid` | The successor's link matches the disclosure's digest in every character but the last. |
+| `16-gap-disclosure-contradicted-at-tail.json` | `receipt_invalid` | The contradiction stands at the live tail, where no successor exists to seal it. |
 
-`gen_gap_disclosure_vectors.py` regenerates this range byte-for-byte.
+`01`–`08` are one vector per rule; `09`–`16` are the second, independent set (#124),
+including both vectors for `disclosure_stream_mismatch` — the rule the
+[#117 review](https://github.com/agentrust-io/trace-spec/issues/117) asked for: a
+disclosure binds to the receipt stream it excuses, or one honestly signed for stream A
+is a transplantable excuse for a gap in stream B.
+`proposal-117/gen_gap_disclosure_vectors.py` regenerates the whole directory
+byte-for-byte.
 
 **These implement the design in `proposals/117-gap-disclosure-design.md`, which departs
 from the field list in #117.** A disclosure carries `previous_receipt_hash` like any chain
@@ -166,65 +210,19 @@ that a hash chain cannot express a range, and the emitter cannot know its succes
 at the moment it writes the disclosure — so the issue's `disclosed_at == range_end_before`
 check compares two fields one party controls, and can only fail for an emitter that is
 buggy rather than one that is lying. Coverage is structural instead: the chain is linear
-and unbroken, so there is nowhere else the missing receipts could have been.
+and unbroken, so there is nowhere else the missing receipts could have been. The #117
+review reached the chain-element conclusion independently, and narrowed the claim: the
+splice proves *where* the gap sits, never that the missing receipts existed, how many
+were lost, or that the issuer did not selectively omit them.
 
-A forged or self-contradictory disclosure is worse than none, so it yields
-`receipt_invalid` rather than falling back to the silent case.
+A forged, transplanted or self-contradictory disclosure is worse than none, so it yields
+`receipt_invalid` rather than falling back to the silent case. Whether a *valid*
+disclosed gap is acceptable is relying-party policy — with one hard bound: it never
+satisfies a profile that requires independently proven completeness.
 
-**Choices these fixtures had to make that the issue does not settle.** They are
-implementation decisions taken to get something runnable, not proposed
-requirements, and each is a question for the maintainers:
-
-1. **Chain binding** is checked as `disclosed_at == range_end_before`. The issue
-   says "sealed at the resumption point" without defining the check.
-2. **Coverage** is an exact boundary match against the absent range. Chain
-   positions are hashes and therefore not orderable, so "covers" cannot be a
-   range comparison without more structure than the issue provides.
-3. **Issuer binding** reads the receipt-issuing key from the verification
-   context, with an optional parent identifier for the hierarchical-parent rule.
-4. **Overlapping disclosures** are deliberately not implemented. The issue leaves
-   the case genuinely underspecified, and a test is the wrong place to settle it.
-
-The signing keys are deliberately deterministic test keys, so the fixture set
-regenerates byte-for-byte. Only public JWKs appear in the files.
-
-## Rule coverage: checks nothing exercised
-
-> Fixtures `18`–`24` are **not a proposal**. Every rule below is one the verifier in
-> `tests/test_action_receipt_fixtures.py` already applies, and which no fixture
-> distinguished. Until these existed, an implementation could omit each check entirely
-> and still pass the published set — which is the one thing a conformance suite exists
-> to prevent.
-
-| Fixture | Rule | What an implementation could have skipped |
-|---|---|---|
-| `18-action-ref-not-recomputable.json` | `action_ref_invalid` | Recomputing the action reference instead of trusting the declared value |
-| `19-call-id-mismatch.json` | `call_id_mismatch` | Checking the receipt is bound to *this* call |
-| `20-session-id-mismatch.json` | `session_id_mismatch` | Checking it is bound to *this* session |
-| `21-evidence-hash-mismatch.json` | `evidence_hash_mismatch` | Recomputing the evidence digest |
-| `22-receipt-issuer-key-unknown.json` | `issuer_key_unknown` | Distinguishing a key it cannot check from a check that failed |
-| `23-receipt-from-future.json` | `receipt_from_future` | Rejecting a receipt issued after the verification time |
-| `24-decision-not-in-enum.json` | `decision_invalid` | Refusing to read an unknown verb as accept or reject |
-
-Two are load-bearing for the trust model rather than tidiness. Without
-`issuer_key_unknown` a receipt authenticates itself: a signature verifies against
-whatever key it names, and only a pinned set decides which keys the verifier can check
-at all. The outcome is `receipt_unverified`, not `receipt_invalid` — an unpinned key is
-an inability to check, not evidence of forgery (spec §3.3.1) — but a verifier that never
-consults its pinned set would report such a receipt as fully valid, and that is the
-implementation this vector distinguishes. Without `evidence_hash_mismatch` the signature
-covers a digest whose document can be swapped, because the receipt signs `evidence_hash`
-and not the evidence body.
-
-They were found by walking the verifier's source for every failure code it can emit and
-comparing that against the codes the fixtures expect — not by reading the set and
-guessing. The method, and what it does not establish, is in
-[`docs/conformance-method.md`](../../docs/conformance-method.md).
-
-One fixture per rule, each triggering exactly that rule and nothing else, so a failure
-names the check that broke. They pin their own deterministic test key, since the private
-half of the key behind `01`–`09` is not published and each fixture already carries its
-own `trusted_issuer_keys`. `gen_rule_coverage_vectors.py` regenerates them byte-for-byte.
+The design note records the choices the issue left open and how each was settled,
+including the review's amendments. The signing keys are deliberately deterministic test
+keys, so the fixture set regenerates byte-for-byte. Only public JWKs appear in the files.
 
 ## Boundary
 

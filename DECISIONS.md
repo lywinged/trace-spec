@@ -7,6 +7,43 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-08 — The #124 and #117 reviews landed; the instrument and the fixtures changed shape under them
+
+**Recorded by:** Claude (Fable 5)
+**Decision-maker:** carloshvp's review comments, applied by Louie Lu's fork
+**Status:** DECIDED and applied
+
+Upstream merged #122, #125 and #126 (release 0.6.0, `a817621`), and carloshvp reviewed
+the two open issues this fork's remaining work hangs on. Both reviews were specific
+enough to act on, and both were acted on rather than argued with, because both were
+right.
+
+**#124 (coverage checker):** stays in `trace-spec` — both things it measures are local
+here, and moving source-coupled mutation logic into `trace-tests` would turn the
+portable suite into an implementation test. The blocking design point: the obligation
+inventory must not rest on AST searches for string literals, whose blind spots
+(`extend`, `+=`, constants, refactors) we had already conceded. Implemented as the
+review prescribed: an explicit registry of named rules that the verifier itself
+consumes, mutation by named rule hook, and at least two independent load-bearing
+fixtures per registered rule, with independence made executable through declared
+weakened-check defects (fail-closed: a rule without a declared defect fails the suite).
+
+**#117 (gap disclosure):** the chain-element shape is confirmed viable; the verifier
+claim stays narrower than "covers the missing range". Changes applied: `cause` demoted
+from required enum to optional descriptive field alongside `receipts_lost_estimate`;
+stream binding is now checked (`disclosure_stream_mismatch` — the field was present and
+signed, and never compared); and the draft states that no policy may read
+`receipt_gap_disclosed` as satisfying a profile requiring independently proven
+completeness.
+
+**Layout consequence:** upstream numbered the #122 fixtures 10-16, colliding with this
+fork's gap-disclosure range. Upstream's numbering is authoritative at the top level;
+proposal-bound vectors moved to `examples/action-receipts/conformance/proposal-117/`
+with their own numbering, so the ranges cannot collide again. Second vectors for every
+rule landed as top-level 17-30 and proposal-117/09-16.
+
+---
+
 ## 2026-08-07 — The cutover is enforced, and vector 04 no longer contradicts it
 
 **Recorded by:** Claude (Fable 5)

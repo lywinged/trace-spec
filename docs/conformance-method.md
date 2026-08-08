@@ -56,29 +56,49 @@ and the vector was left behind.
 **Is every rule exercised?** For each code the verifier can emit, is there a vector that
 expects it? A rule with no vector is a check an implementation can omit while passing.
 
-**Is every rule load-bearing?** The strongest form, and the only one that is really a
-completeness statement: *delete the rule and see whether any vector notices.* A rule can
-be named by a vector and still not be load-bearing — if another rule fires on the same
-input, removing it changes no outcome and nothing distinguishes an implementation that
-performs the check from one that skips it.
+**Is every rule load-bearing — twice?** The strongest form: *delete the rule and count
+the vectors that notice.* A rule can be named by a vector and still not be load-bearing —
+if another rule fires on the same input, removing it changes no outcome and nothing
+distinguishes an implementation that performs the check from one that skips it. And one
+load-bearing vector is existence, not margin: any change that weakens or retires that
+single vector silently removes the rule's coverage. So the floor is two
+([#124](https://github.com/agentrust-io/trace-spec/issues/124)), and a ratchet keeps
+anything above the floor from quietly decaying back toward it.
 
-The third subsumes the first two, which are kept because they are cheap and their
-failure messages are more direct.
+**Are the two vectors different tests, or two copies?** Two identical vectors have
+margin two and prove nothing extra. #124's definition: vectors are independent if a
+single implementation defect causes one to pass and the other to fail. That is made
+executable by declaring, for every rule, at least one *weakened* variant of its check —
+a plausible implementation shortcut: comparing digest prefixes, case-normalising
+identifiers, granting clock tolerance, validating signature structure without
+cryptography. The suite fails unless some declared defect deviates one of the rule's
+vectors while leaving another undisturbed. The declaration is itself fail-closed: a
+rule with no declared defect fails, so "what bug would your second vector catch that
+your first would not?" is answered when the rule is added.
 
-### The inventory is recovered from source, never maintained by hand
+The strong criteria subsume the first two questions, which are kept because they are
+cheap and their failure messages are more direct.
+
+### The inventory is the registry the verifier consumes
 
 The obvious implementation is a list of rules kept next to the tests. That list is
 guaranteed to drift: it is correct only until someone adds a rule and forgets it, and
 the failure is silent in exactly the direction that matters.
 
-So the rule inventory is recovered from the verifier's own source with `ast` — every
-string literal appended to a failure or warning list, and every outcome it can return.
-Adding a rule without a vector becomes a failing test rather than a quiet hole. Removing
-a vector fails with the name of the rule that lost its cover.
+The first replacement recovered the inventory from the verifier's source with `ast` —
+every string literal appended to a failure or warning list. The
+[#124 review](https://github.com/agentrust-io/trace-spec/issues/124) identified that
+this has the mirror failure mode: a rule written as `extend([...])`, `+=`, an f-string
+or a named constant is invisible to the walk, and the suite reports complete coverage
+over an inventory that is quietly missing entries.
 
-Mutation is done on the syntax tree: replace one rule with `pass`, re-execute the
-verifier, and run every vector against the mutant. If no outcome changes, that rule has
-no vector standing behind it.
+The resolution, from the same review: the verifier itself consumes an explicit registry
+of named rules, and the registry *is* the inventory. A check that is not registered
+never runs, so it cannot exist outside the inventory; a residual guard fails on any
+code that would emit around the registry. Mutation follows the same principle — a rule
+is deleted by rebuilding the registry without its entry, or weakened by substituting
+its check, never by pattern-matching source text. If no vector's outcome changes under
+a deletion, that rule has no vector standing behind it.
 
 ## 3. Fixtures and their checker cannot vouch for each other
 
@@ -144,9 +164,11 @@ before any conclusion is drawn from it.
   the vectors is invisible to this method. Only reading the specification finds it.
 - **Not that an implementation is correct.** Passing shows it agrees on these inputs.
   Behaviour on inputs no vector describes is unconstrained.
-- **Not that the vectors are adversarial enough.** Load-bearing is a low bar: one
-  distinguishing input clears it. A rule with exactly one vector is covered, not
-  well tested.
+- **Not that the vectors are adversarial enough.** Two independent vectors per rule is
+  a floor, not a proof of adversarial coverage: independence is demonstrated against
+  the *declared* defects, and a shortcut nobody thought to declare is a shortcut the
+  pair may still share. The declaration requirement makes the blind spot enumerable,
+  not empty.
 
 The method answers one question — *could an implementation skip this check and still
 pass?* — and answers it mechanically. That is narrower than "is the suite good", and it
