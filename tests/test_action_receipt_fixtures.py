@@ -1,4 +1,21 @@
-"""Conformance checks for the informative action-receipt fixture set."""
+"""Conformance checks for the informative action-receipt fixture set.
+
+The verifier consumes an explicit registry of named rules (``RULES``) rather than
+emitting failure codes inline. The registry is the inventory: every obligation this
+verifier enforces is one ``Rule`` entry, and the completeness suite in
+`test_vector_completeness.py` mutates registry entries by name — removing or weakening
+one hook at a time — to prove each rule is load-bearing for at least two independent
+fixtures.
+
+That shape is deliberate, and it is the review outcome of upstream #124: an earlier
+revision recovered the rule inventory from this module's source by AST-walking for
+string literals appended to failure lists. The review's objection stands — ``append``
+vs ``extend``, constants, f-strings and refactors all create silent blind spots in a
+source-derived inventory. A registry the verifier itself consumes turns "add a rule
+without adding it to the inventory" from heuristically detectable into structurally
+difficult: a check that is not registered is a check that never runs, and an
+unregistered emission path is a guard failure, not a silent hole.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +23,8 @@ import base64
 import binascii
 import hashlib
 import json
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -18,6 +36,20 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 FIXTURE_DIR = Path(__file__).parent.parent / "examples" / "action-receipts" / "conformance"
 ACTION_REF_FIELDS = ("agent_id", "action_type", "action_scope", "action_timestamp")
+
+STATUSES = frozenset(
+    {
+        "receipt_valid_accepted",
+        "receipt_valid_rejected",
+        "receipt_invalid",
+        "receipt_unverified",
+        "receipt_missing_required",
+        "receipt_gap_disclosed",
+        "gap_disclosure_unverified",
+    }
+)
+"""Every outcome the verifier can return. Enforced at construction: a status outside
+this set is a bug in the verifier, not a new outcome."""
 
 
 @dataclass(frozen=True)
@@ -31,6 +63,14 @@ class ReceiptResult:
 
     One disclosed gap is an incident; nine in a row is a different claim about the
     deployment, and collapsing them loses the part a relying party acts on."""
+
+    def __post_init__(self) -> None:
+        assert self.status in STATUSES, f"undeclared verifier outcome {self.status!r}"
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
 
 def _load_fixture(path: Path) -> dict[str, Any]:
@@ -53,67 +93,246 @@ def _parse_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _verify_signature(receipt: dict[str, Any], trusted_jwk: dict[str, str]) -> None:
+def _receipt_age_seconds(fixture: dict[str, Any]) -> float:
+    delta = _parse_timestamp(fixture["context"]["verification_time"]) - _parse_timestamp(
+        fixture["receipt"]["issued_at"]
+    )
+    return delta.total_seconds()
+
+
+def _trusted_jwk(fixture: dict[str, Any], signed: dict[str, Any]) -> dict[str, str] | None:
+    return fixture["trusted_issuer_keys"].get(signed["issuer_key_id"])
+
+
+def _signature_invalid(signed: dict[str, Any], trusted_jwk: dict[str, str]) -> bool:
     if trusted_jwk.get("kty") != "OKP" or trusted_jwk.get("crv") != "Ed25519":
-        raise ValueError("fixture key must be an Ed25519 OKP JWK")
-    public_key = Ed25519PublicKey.from_public_bytes(_decode_base64url(trusted_jwk["x"]))
-    signing_input = {key: value for key, value in receipt.items() if key != "signature"}
-    public_key.verify(_decode_base64url(receipt["signature"]), rfc8785.dumps(signing_input))
+        return True
+    try:
+        public_key = Ed25519PublicKey.from_public_bytes(_decode_base64url(trusted_jwk["x"]))
+        signing_input = {key: value for key, value in signed.items() if key != "signature"}
+        public_key.verify(_decode_base64url(signed["signature"]), rfc8785.dumps(signing_input))
+    except (InvalidSignature, ValueError):
+        return True
+    return False
 
 
-def _verify_gap_disclosure(
-    fixture: dict[str, Any], disclosure: dict[str, Any]
-) -> ReceiptResult:
+# ---------------------------------------------------------------------------
+# The rule registry
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Rule:
+    """One named obligation. ``check`` returns True when the defect it guards against
+    is observed in the fixture — i.e. True means the code is emitted."""
+
+    code: str
+    severity: str  # "failure" | "warning"
+    path: str  # "receipt" | "disclosure" | "missing"
+    check: Callable[[dict[str, Any]], bool] = field(compare=False)
+
+
+def _action_ref_invalid(f: dict[str, Any]) -> bool:
+    preimage = {name: f["action"][name] for name in ACTION_REF_FIELDS}
+    return bool(f["action"]["action_ref"] != _sha256_jcs(preimage))
+
+
+def _action_ref_mismatch(f: dict[str, Any]) -> bool:
+    return bool(f["receipt"]["action_ref"] != f["action"]["action_ref"])
+
+
+def _call_id_mismatch(f: dict[str, Any]) -> bool:
+    return bool(f["receipt"]["linked_call_id"] != f["context"]["call_id"])
+
+
+def _session_id_mismatch(f: dict[str, Any]) -> bool:
+    return bool(f["receipt"]["session_id"] != f["context"]["session_id"])
+
+
+def _evidence_hash_mismatch(f: dict[str, Any]) -> bool:
+    return bool(f["receipt"]["evidence_hash"] != _sha256_jcs(f["evidence"]))
+
+
+def _issuer_key_unknown(f: dict[str, Any]) -> bool:
+    # Spec section 3.3.1: a receipt whose issuer key is unknown to the verifier is
+    # unverified, not invalid. "Invalid" would claim evidence of a defect that an
+    # unpinned key does not provide; the structural checks still run, and any of them
+    # failing is positive evidence that does make the receipt invalid.
+    return _trusted_jwk(f, f["receipt"]) is None
+
+
+def _receipt_signature_invalid(f: dict[str, Any]) -> bool:
+    jwk = _trusted_jwk(f, f["receipt"])
+    return jwk is not None and _signature_invalid(f["receipt"], jwk)
+
+
+def _receipt_stale(f: dict[str, Any]) -> bool:
+    return _receipt_age_seconds(f) > f["context"]["max_receipt_age_seconds"]
+
+
+def _receipt_from_future(f: dict[str, Any]) -> bool:
+    return _receipt_age_seconds(f) < 0
+
+
+def _receipt_chain_gap(f: dict[str, Any]) -> bool:
+    return bool(
+        f["receipt"]["previous_receipt_hash"] != f["context"]["expected_previous_receipt_hash"]
+    )
+
+
+def _unsupported_physical_completion(f: dict[str, Any]) -> bool:
+    return bool(f["evidence"]["physical_completion_claim"] != "none")
+
+
+def _issuer_not_independent(f: dict[str, Any]) -> bool:
+    return bool(f["receipt"]["issuer_independence"] == "gateway_self_report")
+
+
+def _decision_invalid(f: dict[str, Any]) -> bool:
+    return f["receipt"]["decision"] not in {"accepted", "rejected"}
+
+
+def _receipt_missing(f: dict[str, Any]) -> bool:
+    return f.get("receipt") is None
+
+
+def _disclosure_key_unknown(f: dict[str, Any]) -> bool:
+    # Spec section 3.3.1 again: an unpinned key is an inability to check, not
+    # evidence of forgery, so this is an advisory rather than a failure.
+    return _trusted_jwk(f, f["gap_disclosure"]) is None
+
+
+def _disclosure_signature_invalid(f: dict[str, Any]) -> bool:
+    jwk = _trusted_jwk(f, f["gap_disclosure"])
+    return jwk is not None and _signature_invalid(f["gap_disclosure"], jwk)
+
+
+def _disclosure_issuer_not_chain_key(f: dict[str, Any]) -> bool:
+    # Issuer binding is read off the chain, not supplied out of band: the disclosure
+    # must be signed by whoever signed the element it links back to, or an ancestor.
+    # That element is present by construction, so its key is knowable.
+    chain = f["context"]["chain"]
+    permitted = {chain["predecessor_issuer_key_id"], *chain["permitted_ancestor_key_ids"]}
+    return f["gap_disclosure"]["issuer_key_id"] not in permitted
+
+
+def _disclosure_stream_mismatch(f: dict[str, Any]) -> bool:
+    # The disclosure names the receipt stream it excuses, and the name is under the
+    # signature. Without this comparison a disclosure honestly signed for one stream
+    # is a transplantable excuse for a gap in any other (upstream #117 review:
+    # bind the disclosure to issuer and receipt-stream identity to prevent replay).
+    return bool(f["gap_disclosure"]["session_id"] != f["context"]["session_id"])
+
+
+def _disclosure_predecessor_absent(f: dict[str, Any]) -> bool:
+    # Sealed from both directions, or not sealed. The disclosure links back to a
+    # present element, and the next element links back to the disclosure. A
+    # disclosure attached at one end can be minted later and slid over any gap.
+    chain = f["context"]["chain"]
+    return bool(
+        f["gap_disclosure"]["previous_receipt_hash"] != chain["predecessor_hash"]
+        or not chain["predecessor_present"]
+    )
+
+
+def _disclosure_not_sealed_by_successor(f: dict[str, Any]) -> bool:
+    chain = f["context"]["chain"]
+    return bool(
+        chain["successor_present"]
+        and chain["successor_previous_receipt_hash"] != _sha256_jcs(f["gap_disclosure"])
+    )
+
+
+def _disclosure_contradicted(f: dict[str, Any]) -> bool:
+    return bool(f["context"]["chain"]["claimed_absent_but_present"])
+
+
+RULES: tuple[Rule, ...] = (
+    # -- a required receipt that was never produced ------------------------------
+    Rule("receipt_missing", "failure", "missing", _receipt_missing),
+    # -- receipts ----------------------------------------------------------------
+    Rule("action_ref_invalid", "failure", "receipt", _action_ref_invalid),
+    Rule("action_ref_mismatch", "failure", "receipt", _action_ref_mismatch),
+    Rule("call_id_mismatch", "failure", "receipt", _call_id_mismatch),
+    Rule("session_id_mismatch", "failure", "receipt", _session_id_mismatch),
+    Rule("evidence_hash_mismatch", "failure", "receipt", _evidence_hash_mismatch),
+    Rule("issuer_key_unknown", "warning", "receipt", _issuer_key_unknown),
+    Rule("signature_or_key_mismatch", "failure", "receipt", _receipt_signature_invalid),
+    Rule("receipt_stale", "failure", "receipt", _receipt_stale),
+    Rule("receipt_from_future", "failure", "receipt", _receipt_from_future),
+    Rule("receipt_chain_gap", "failure", "receipt", _receipt_chain_gap),
+    Rule(
+        "unsupported_physical_completion_claim",
+        "failure",
+        "receipt",
+        _unsupported_physical_completion,
+    ),
+    Rule("issuer_not_independent", "warning", "receipt", _issuer_not_independent),
+    Rule("decision_invalid", "failure", "receipt", _decision_invalid),
+    # -- gap disclosures (proposal #117; the splice model) -----------------------
+    Rule("disclosure_key_unknown", "warning", "disclosure", _disclosure_key_unknown),
+    Rule(
+        "disclosure_signature_invalid", "failure", "disclosure", _disclosure_signature_invalid
+    ),
+    Rule(
+        "disclosure_issuer_not_chain_key",
+        "failure",
+        "disclosure",
+        _disclosure_issuer_not_chain_key,
+    ),
+    Rule("disclosure_stream_mismatch", "failure", "disclosure", _disclosure_stream_mismatch),
+    Rule(
+        "disclosure_predecessor_absent",
+        "failure",
+        "disclosure",
+        _disclosure_predecessor_absent,
+    ),
+    Rule(
+        "disclosure_not_sealed_by_successor",
+        "failure",
+        "disclosure",
+        _disclosure_not_sealed_by_successor,
+    ),
+    Rule("disclosure_contradicted", "failure", "disclosure", _disclosure_contradicted),
+)
+
+# receipts_lost_estimate is deliberately not a rule. The receipts it counts are absent
+# by definition, so nothing here corroborates it, and its type is the schema's business
+# rather than the verifier's. An earlier revision validated it; the completeness suite
+# then reported the rule as load-bearing for no vector, and the attempt to justify it
+# failed. Left as evidence that the rule was considered.
+
+
+def _evaluate(
+    fixture: dict[str, Any], rules: Sequence[Rule], path: str
+) -> tuple[list[str], list[str]]:
+    """The single point where rule codes are emitted.
+
+    Everything the verifier reports flows through this loop, which is what makes the
+    registry authoritative: the completeness suite asserts by AST that no other code
+    in this module appends to a failure or warning list.
+    """
+    failures: list[str] = []
+    warnings: list[str] = []
+    for rule in rules:
+        if rule.path == path and rule.check(fixture):
+            (failures if rule.severity == "failure" else warnings).append(rule.code)
+    return failures, warnings
+
+
+# ---------------------------------------------------------------------------
+# Orchestration: paths and outcomes
+# ---------------------------------------------------------------------------
+
+
+def _verify_gap_disclosure(fixture: dict[str, Any], rules: Sequence[Rule]) -> ReceiptResult:
     """Evaluate a GapDisclosure covering receipts that were never emitted.
 
     A disclosed gap is distinct from ``receipt_chain_gap``: the latter is a present
     receipt whose predecessor hash does not match, while a disclosure accounts for
     receipts that do not exist.
     """
-    chain = fixture["context"]["chain"]
-    failures: list[str] = []
-    warnings: list[str] = []
-
-    trusted_jwk = fixture["trusted_issuer_keys"].get(disclosure["issuer_key_id"])
-    if trusted_jwk is None:
-        # Spec section 3.3.1: evidence whose issuer key is unknown to the verifier is
-        # unverified, not invalid. An unpinned key is an inability to check, not
-        # evidence of forgery, so this is an advisory rather than a failure.
-        warnings.append("disclosure_key_unknown")
-    else:
-        try:
-            _verify_signature(disclosure, trusted_jwk)
-        except (InvalidSignature, ValueError):
-            failures.append("disclosure_signature_invalid")
-
-    # Issuer binding is read off the chain, not supplied out of band: the disclosure
-    # must be signed by whoever signed the element it links back to, or an ancestor.
-    # That element is present by construction, so its key is knowable.
-    permitted = {chain["predecessor_issuer_key_id"], *chain["permitted_ancestor_key_ids"]}
-    if disclosure["issuer_key_id"] not in permitted:
-        failures.append("disclosure_issuer_not_chain_key")
-
-    # Sealed from both directions, or not sealed. The disclosure links back to a
-    # present element, and the next element links back to the disclosure. A
-    # disclosure attached at one end can be minted later and slid over any gap.
-    if disclosure["previous_receipt_hash"] != chain["predecessor_hash"] or not chain[
-        "predecessor_present"
-    ]:
-        failures.append("disclosure_predecessor_absent")
-    if (
-        chain["successor_present"]
-        and chain["successor_previous_receipt_hash"] != _sha256_jcs(disclosure)
-    ):
-        failures.append("disclosure_not_sealed_by_successor")
-
-    if chain["claimed_absent_but_present"]:
-        failures.append("disclosure_contradicted")
-
-    # receipts_lost_estimate is deliberately not checked. The receipts it counts are
-    # absent by definition, so nothing here corroborates it, and its type is the
-    # schema's business rather than the verifier's. An earlier revision validated it;
-    # the completeness suite then reported the rule as load-bearing for no vector, and
-    # the attempt to justify it failed. Left as evidence that the rule was considered.
+    failures, warnings = _evaluate(fixture, rules, "disclosure")
 
     if failures:
         return ReceiptResult(
@@ -123,7 +342,7 @@ def _verify_gap_disclosure(
             warnings=warnings,
         )
 
-    if trusted_jwk is None:
+    if "disclosure_key_unknown" in warnings:
         # No positive defect, and no verified signature either: the disclosure confers
         # nothing and proves nothing. It does not count as a properly disclosed gap —
         # that status requires a signature the verifier actually checked.
@@ -136,85 +355,37 @@ def _verify_gap_disclosure(
 
     # Coverage is structural under the splice model: the chain is linear and unbroken,
     # so there is nowhere else the missing receipts could have been. Nothing to compare.
+    # What that establishes stays narrow (upstream #117 review): the chain shows where
+    # the gap sits, not that the undisclosed receipts ever existed, how many were lost,
+    # or that the issuer did not selectively omit them. Whether a disclosed gap is
+    # acceptable is a relying-party policy decision, which is why the outcome is its
+    # own status rather than a form of validity.
     return ReceiptResult(
         status="receipt_gap_disclosed",
         controller_outcome="unknown",
         failures=[],
-        warnings=["receipt_gap_disclosed"],
-        consecutive_disclosures=chain["consecutive_disclosures"],
+        warnings=[*warnings, "receipt_gap_disclosed"],
+        consecutive_disclosures=fixture["context"]["chain"]["consecutive_disclosures"],
     )
 
 
-def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
-    context = fixture["context"]
-    action = fixture["action"]
+def _verify_fixture(fixture: dict[str, Any], rules: Sequence[Rule] = RULES) -> ReceiptResult:
     receipt = fixture.get("receipt")
 
     if receipt is None:
-        if not context["require_receipt"]:
+        if not fixture["context"]["require_receipt"]:
             raise AssertionError("the conformance set has no optional missing-receipt case")
-        disclosure = fixture.get("gap_disclosure")
-        if disclosure is not None:
-            return _verify_gap_disclosure(fixture, disclosure)
+        if fixture.get("gap_disclosure") is not None:
+            return _verify_gap_disclosure(fixture, rules)
+        failures, warnings = _evaluate(fixture, rules, "missing")
         return ReceiptResult(
             status="receipt_missing_required",
             controller_outcome="unknown",
-            failures=["receipt_missing"],
-            warnings=[],
+            failures=failures,
+            warnings=warnings,
         )
 
-    failures: list[str] = []
-    warnings: list[str] = []
-
-    action_preimage = {field: action[field] for field in ACTION_REF_FIELDS}
-    expected_action_ref = _sha256_jcs(action_preimage)
-    if action["action_ref"] != expected_action_ref:
-        failures.append("action_ref_invalid")
-    if receipt["action_ref"] != action["action_ref"]:
-        failures.append("action_ref_mismatch")
-
-    if receipt["linked_call_id"] != context["call_id"]:
-        failures.append("call_id_mismatch")
-    if receipt["session_id"] != context["session_id"]:
-        failures.append("session_id_mismatch")
-
-    evidence = fixture["evidence"]
-    if receipt["evidence_hash"] != _sha256_jcs(evidence):
-        failures.append("evidence_hash_mismatch")
-
-    trusted_jwk = fixture["trusted_issuer_keys"].get(receipt["issuer_key_id"])
-    if trusted_jwk is None:
-        # Spec section 3.3.1: a receipt whose issuer key is unknown to the verifier is
-        # unverified, not invalid. "Invalid" would claim evidence of a defect that an
-        # unpinned key does not provide; the structural checks below still run, and any
-        # of them failing is positive evidence that does make the receipt invalid.
-        warnings.append("issuer_key_unknown")
-    else:
-        try:
-            _verify_signature(receipt, trusted_jwk)
-        except (InvalidSignature, ValueError):
-            failures.append("signature_or_key_mismatch")
-
-    receipt_age = _parse_timestamp(context["verification_time"]) - _parse_timestamp(
-        receipt["issued_at"]
-    )
-    if receipt_age.total_seconds() > context["max_receipt_age_seconds"]:
-        failures.append("receipt_stale")
-    if receipt_age.total_seconds() < 0:
-        failures.append("receipt_from_future")
-
-    if receipt["previous_receipt_hash"] != context["expected_previous_receipt_hash"]:
-        failures.append("receipt_chain_gap")
-
-    if evidence["physical_completion_claim"] != "none":
-        failures.append("unsupported_physical_completion_claim")
-
-    if receipt["issuer_independence"] == "gateway_self_report":
-        warnings.append("issuer_not_independent")
-
-    decision = receipt["decision"]
-    if decision not in {"accepted", "rejected"}:
-        failures.append("decision_invalid")
+    failures, warnings = _evaluate(fixture, rules, "receipt")
 
     if failures:
         return ReceiptResult(
@@ -224,7 +395,7 @@ def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
             warnings=warnings,
         )
 
-    if trusted_jwk is None:
+    if "issuer_key_unknown" in warnings:
         # Nothing failed, but nothing was signed by a key the verifier could check
         # either. The receipt confers no trust and proves no wrongdoing, and the
         # controller outcome stays unknown because the evidence is only as good as
@@ -236,14 +407,22 @@ def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
             warnings=warnings,
         )
 
-    status = "receipt_valid_accepted" if decision == "accepted" else "receipt_valid_rejected"
+    status = (
+        "receipt_valid_accepted"
+        if receipt["decision"] == "accepted"
+        else "receipt_valid_rejected"
+    )
     return ReceiptResult(
         status=status,
-        controller_outcome=evidence["terminal_state"],
+        controller_outcome=fixture["evidence"]["terminal_state"],
         failures=[],
         warnings=warnings,
     )
 
+
+# ---------------------------------------------------------------------------
+# The conformance run
+# ---------------------------------------------------------------------------
 
 FIXTURE_PATHS = sorted(FIXTURE_DIR.rglob("*.json"))
 
@@ -270,6 +449,24 @@ def test_fixture_set_is_complete() -> None:
         "14-receipt-issuer-key-unknown.json",
         "15-receipt-from-future.json",
         "16-decision-not-in-enum.json",
+        # 17-30 are the second vector for every receipt rule (#124: two independent
+        # vectors each), placed against implementation shortcuts the first set
+        # cannot detect — prefix-true digests, case-variant identifiers, one-second
+        # boundaries, structural-but-wrong signatures, an explicit-null receipt.
+        "17-missing-receipt-explicit-null.json",
+        "18-action-ref-tail-forged.json",
+        "19-action-ref-mismatch-in-tail.json",
+        "20-call-id-case-mismatch.json",
+        "21-session-id-case-mismatch.json",
+        "22-evidence-hash-mismatch-in-tail.json",
+        "23-receipt-issuer-key-case-variant.json",
+        "24-receipt-signature-malformed.json",
+        "25-stale-receipt-boundary.json",
+        "26-receipt-from-future-boundary.json",
+        "27-receipt-chain-gap-in-tail.json",
+        "28-physical-completion-claim-case.json",
+        "29-same-party-self-report-rejected.json",
+        "30-decision-case-variant.json",
         "proposal-117/01-gap-disclosed-valid.json",
         "proposal-117/02-gap-disclosure-dangling-predecessor.json",
         "proposal-117/03-gap-disclosure-successor-does-not-link.json",
@@ -278,6 +475,16 @@ def test_fixture_set_is_complete() -> None:
         "proposal-117/06-gap-disclosed-parent-key-null-estimate.json",
         "proposal-117/07-gap-disclosure-unknown-key.json",
         "proposal-117/08-gap-disclosure-tampered.json",
+        # proposal-117/09-16: the second vector per disclosure rule, same design;
+        # 12 and 13 carry disclosure_stream_mismatch, the rule the #117 review added.
+        "proposal-117/09-gap-disclosure-key-case-variant.json",
+        "proposal-117/10-gap-disclosure-signature-malformed.json",
+        "proposal-117/11-gap-disclosure-confusable-ancestor-key.json",
+        "proposal-117/12-gap-disclosure-replayed-stream.json",
+        "proposal-117/13-gap-disclosure-stream-case-variant.json",
+        "proposal-117/14-gap-disclosure-predecessor-link-tail.json",
+        "proposal-117/15-gap-disclosure-seal-tail-mismatch.json",
+        "proposal-117/16-gap-disclosure-contradicted-at-tail.json",
     ]
 
 

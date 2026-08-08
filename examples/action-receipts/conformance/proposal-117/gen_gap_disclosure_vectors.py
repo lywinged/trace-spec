@@ -2,6 +2,14 @@
 
 A disclosure is a chain element, not a description of a range. See
 proposals/117-gap-disclosure-design.md. Deterministic keys; public JWKs only.
+
+01-08 are one vector per rule. 09-16 are the second set (upstream #124: two
+independent vectors per rule), each placed against an implementation shortcut its
+partner cannot detect — case-normalised key and session lookups, digest comparisons
+truncated to a prefix, structural signature validation, and a contradiction check
+gated on the sealed path. 12 and 13 cover `disclosure_stream_mismatch`, the rule the
+#117 review asked for: a disclosure must be bound to the receipt stream it excuses,
+or one honestly signed for stream A is a transplantable excuse for a gap in stream B.
 """
 
 from __future__ import annotations
@@ -16,7 +24,7 @@ import rfc8785
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-OUT = Path("examples/action-receipts/conformance")
+OUT = Path(__file__).resolve().parent
 PROFILE = "trace.action_receipt.conformance.v0"
 SESSION = "trace-session-2026-07-06T15:22:11Z"
 ISSUER = "did:web:factory.example:safety-controller"
@@ -31,6 +39,14 @@ KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
 PARENT = Ed25519PrivateKey.from_private_bytes(bytes(range(32, 64)))
 FOREIGN = Ed25519PrivateKey.from_private_bytes(
     hashlib.sha256(b"trace-spec#117 unrelated trusted key").digest()
+)
+
+# A distinct keypair registered under a case-variant of the parent's key id: the
+# confusable-identifier attack, for vector 11. Key ids are opaque strings, so the
+# variant names a different key, not the parent.
+CONFUSABLE_KEY_ID = f"{ISSUER}#ED25519-WORKLOAD-ATTESTATION"
+CONFUSABLE = Ed25519PrivateKey.from_private_bytes(
+    hashlib.sha256(b"trace-spec#117 confusable ancestor key").digest()
 )
 
 PREDECESSOR_HASH = "sha256:" + "a1" * 32
@@ -112,6 +128,7 @@ def fixture(
     context: dict[str, Any],
     *,
     link_successor: bool = True,
+    trusted: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if link_successor and context["chain"]["successor_previous_receipt_hash"] is None:
         context["chain"]["successor_previous_receipt_hash"] = digest(disclosure)
@@ -132,7 +149,7 @@ def fixture(
             "action_timestamp": "2026-07-06T15:22:13Z",
             "action_ref": "sha256:" + "e3" * 32,
         },
-        "trusted_issuer_keys": TRUSTED,
+        "trusted_issuer_keys": trusted if trusted is not None else TRUSTED,
         "gap_disclosure": disclosure,
         "expected": expected,
     }
@@ -172,14 +189,14 @@ def unverified(*advisories: str) -> dict[str, Any]:
 def main() -> None:
     out: list[tuple[str, dict[str, Any]]] = []
 
-    out.append(("10-gap-disclosed-valid.json", fixture(
+    out.append(("01-gap-disclosed-valid.json", fixture(
         "gap-disclosed-valid",
         "A disclosure spliced into the chain: it links back to a present element and "
         "the next element links back to it. Coverage is structural, so nothing is "
         "asserted about a range.",
         sign(base_disclosure(), KEY), ok(), base_context())))
 
-    out.append(("11-gap-disclosure-dangling-predecessor.json", fixture(
+    out.append(("02-gap-disclosure-dangling-predecessor.json", fixture(
         "gap-disclosure-dangling-predecessor",
         "The disclosure links back to an element that is not in the chain. Half a "
         "splice is not a splice: it fixes nothing in place.",
@@ -187,7 +204,7 @@ def main() -> None:
         bad("disclosure_predecessor_absent"),
         base_context(predecessor_present=False))))
 
-    out.append(("12-gap-disclosure-successor-does-not-link.json", fixture(
+    out.append(("03-gap-disclosure-successor-does-not-link.json", fixture(
         "gap-disclosure-successor-does-not-link",
         "The next element after resumption links past the disclosure to the element "
         "before the gap, leaving the disclosure attached at one end only. A disclosure "
@@ -197,7 +214,7 @@ def main() -> None:
         base_context(successor_previous_receipt_hash=PREDECESSOR_HASH),
         link_successor=False)))
 
-    out.append(("13-gap-disclosure-contradicted.json", fixture(
+    out.append(("04-gap-disclosure-contradicted.json", fixture(
         "gap-disclosure-contradicted",
         "Elements the disclosure implies are absent are present in the chain. A "
         "self-contradictory disclosure impeaches the emitter rather than excusing it.",
@@ -205,7 +222,7 @@ def main() -> None:
         bad("disclosure_contradicted"),
         base_context(claimed_absent_but_present=["sha256:" + "c9" * 32]))))
 
-    out.append(("14-gap-disclosure-foreign-key.json", fixture(
+    out.append(("05-gap-disclosure-foreign-key.json", fixture(
         "gap-disclosure-foreign-key",
         "Signed by a key the verifier trusts, but which is neither the key that signed "
         "the linked element nor an ancestor of it. A gap is where introducing an "
@@ -213,7 +230,7 @@ def main() -> None:
         sign({**base_disclosure(), "issuer_key_id": FOREIGN_KEY_ID}, FOREIGN),
         bad("disclosure_issuer_not_chain_key"), base_context())))
 
-    out.append(("15-gap-disclosed-parent-key-null-estimate.json", fixture(
+    out.append(("06-gap-disclosed-parent-key-null-estimate.json", fixture(
         "gap-disclosed-parent-key-null-estimate",
         "Signed by the hierarchical parent, because the crash took the session key "
         "with it, and the count of lost receipts is not bounded. The estimate is an "
@@ -222,7 +239,7 @@ def main() -> None:
               "receipts_lost_estimate": None}, PARENT),
         ok(consecutive=3), base_context(consecutive_disclosures=3))))
 
-    out.append(("16-gap-disclosure-unknown-key.json", fixture(
+    out.append(("07-gap-disclosure-unknown-key.json", fixture(
         "gap-disclosure-unknown-key",
         "The named key is the one that signed the linked element, but the verifier "
         "does not hold it. Chain position does not confer trust — and the verifier's "
@@ -237,28 +254,131 @@ def main() -> None:
 
     tampered = sign(base_disclosure(), KEY)
     tampered["cause"] = "shutdown"  # altered after signing
-    out.append(("17-gap-disclosure-tampered.json", fixture(
+    out.append(("08-gap-disclosure-tampered.json", fixture(
         "gap-disclosure-tampered",
         "Altered after signing, so the signature no longer covers its contents.",
         tampered, bad("disclosure_signature_invalid"), base_context())))
+
+    # -----------------------------------------------------------------------
+    # 09-16: the second vector for every disclosure rule (#124), each placed
+    # against an implementation shortcut its partner in 01-08 cannot detect.
+    # -----------------------------------------------------------------------
+
+    def tail_flip(value: str) -> str:
+        """The same digest through every prefix, wrong in the final character."""
+        return value[:-1] + ("0" if value[-1] != "0" else "1")
+
+    # disclosure_key_unknown, second vector: the verifier pins this very key under a
+    # case-variant of its id. An exact lookup fails; a case-normalising lookup
+    # resolves it and verifies. 07 names a key absent under any normalisation.
+    out.append(("09-gap-disclosure-key-case-variant.json", fixture(
+        "gap-disclosure-key-case-variant",
+        "The trusted set pins the right public key under a case-variant of the "
+        "disclosure's issuer_key_id. Key identifiers are opaque strings: holding the "
+        "key under a different spelling is not holding the key the disclosure names.",
+        sign(base_disclosure(), KEY),
+        unverified("disclosure_key_unknown"),
+        base_context(),
+        trusted={
+            KEY_ID.upper(): jwk(KEY),
+            PARENT_KEY_ID: jwk(PARENT),
+            FOREIGN_KEY_ID: jwk(FOREIGN),
+        })))
+
+    # disclosure_signature_invalid, second vector: a signature that decodes cleanly
+    # to 32 bytes — half an Ed25519 signature. 08 is a well-formed 64-byte signature
+    # over altered content, which only cryptographic verification rejects; this one
+    # falls to structure alone, so the pair separates the two kinds of check.
+    malformed = sign(base_disclosure(), KEY)
+    malformed["signature"] = b64u(bytes(32))
+    out.append(("10-gap-disclosure-signature-malformed.json", fixture(
+        "gap-disclosure-signature-malformed",
+        "The signature is valid base64url of the wrong length. Together with the "
+        "tampered vector this separates structural validation from verification.",
+        malformed, bad("disclosure_signature_invalid"), base_context())))
+
+    # disclosure_issuer_not_chain_key, second vector: a distinct key registered
+    # under a case-variant of the permitted ancestor's id. The verifier trusts it and
+    # the signature verifies — entitlement is what fails. A membership test that
+    # normalises case admits it. 05's foreign key fails under any normalisation.
+    out.append(("11-gap-disclosure-confusable-ancestor-key.json", fixture(
+        "gap-disclosure-confusable-ancestor-key",
+        "Signed by a trusted key whose id is the permitted ancestor's id in a "
+        "different case — a confusable registration, not the ancestor. Entitlement "
+        "to disclose is bound to the chain's exact key ids.",
+        sign({**base_disclosure(), "issuer_key_id": CONFUSABLE_KEY_ID}, CONFUSABLE),
+        bad("disclosure_issuer_not_chain_key"),
+        base_context(),
+        trusted={**TRUSTED, CONFUSABLE_KEY_ID: jwk(CONFUSABLE)})))
+
+    # disclosure_stream_mismatch, both vectors: the rule the #117 review added.
+    out.append(("12-gap-disclosure-replayed-stream.json", fixture(
+        "gap-disclosure-replayed-stream",
+        "A disclosure honestly signed for a different session, presented against "
+        "this one. Every structural check passes — the splice is sound, the key is "
+        "entitled — because the disclosure was genuine where it was minted. Stream "
+        "binding is the only thing that refuses the transplant.",
+        sign({**base_disclosure(),
+              "session_id": "trace-session-2026-07-01T08:00:00Z"}, KEY),
+        bad("disclosure_stream_mismatch"), base_context())))
+
+    out.append(("13-gap-disclosure-stream-case-variant.json", fixture(
+        "gap-disclosure-stream-case-variant",
+        "The disclosure's session_id is this session's id upper-cased. Session "
+        "identifiers are opaque: a case-normalising comparison reads this as bound "
+        "to the stream, and it is not.",
+        sign({**base_disclosure(), "session_id": SESSION.upper()}, KEY),
+        bad("disclosure_stream_mismatch"), base_context())))
+
+    # disclosure_predecessor_absent, second vector: the predecessor is present and
+    # the link agrees with its hash through every prefix, wrong in the last
+    # character. 02's predecessor is absent outright, which a truncated comparison
+    # still catches via the presence bit — this one it forgives.
+    out.append(("14-gap-disclosure-predecessor-link-tail.json", fixture(
+        "gap-disclosure-predecessor-link-tail",
+        "The disclosure's previous_receipt_hash matches the present predecessor's "
+        "hash in all but the final character. A link to almost the right element is "
+        "a link to nothing.",
+        sign({**base_disclosure(),
+              "previous_receipt_hash": tail_flip(PREDECESSOR_HASH)}, KEY),
+        bad("disclosure_predecessor_absent"), base_context())))
+
+    # disclosure_not_sealed_by_successor, second vector: the successor's link agrees
+    # with the disclosure's digest through every prefix. 03's successor links
+    # somewhere else entirely.
+    sealed_almost = sign(base_disclosure(), KEY)
+    out.append(("15-gap-disclosure-seal-tail-mismatch.json", fixture(
+        "gap-disclosure-seal-tail-mismatch",
+        "The next element's previous_receipt_hash matches the disclosure's digest "
+        "in all but the final character: sealed to a truncated comparison, unsealed "
+        "in fact.",
+        sealed_almost,
+        bad("disclosure_not_sealed_by_successor"),
+        base_context(successor_previous_receipt_hash=tail_flip(digest(sealed_almost))),
+        link_successor=False)))
+
+    # disclosure_contradicted, second vector: the contradiction stands at the tail
+    # of the chain, where no successor exists yet. A contradiction check gated on
+    # the sealed path — natural, since sealing is where cross-examination happens —
+    # never runs here. 04's contradiction sits on the sealed path.
+    out.append(("16-gap-disclosure-contradicted-at-tail.json", fixture(
+        "gap-disclosure-contradicted-at-tail",
+        "Elements the disclosure implies are absent are present, and the disclosure "
+        "sits at the live tail with no successor yet. Self-contradiction impeaches "
+        "the emitter wherever it stands.",
+        sign(base_disclosure(), KEY),
+        bad("disclosure_contradicted"),
+        base_context(
+            claimed_absent_but_present=["sha256:" + "c9" * 32],
+            successor_present=False,
+            successor_previous_receipt_hash=None,
+        ),
+        link_successor=False)))
 
     for name, doc in out:
         (OUT / name).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
         print("wrote", name)
 
-    stale = OUT / "11-gap-disclosure-range-mismatch.json"
-    if stale.exists():
-        stale.unlink()
-        print("removed 11-gap-disclosure-range-mismatch.json (range coverage is no "
-              "longer expressible)")
-    stale = OUT / "12-gap-disclosure-unbound.json"
-    if stale.exists():
-        stale.unlink()
-        print("removed 12-gap-disclosure-unbound.json (replaced by the successor-link case)")
-    stale = OUT / "15-gap-disclosed-null-estimate.json"
-    if stale.exists():
-        stale.unlink()
-        print("removed 15-gap-disclosed-null-estimate.json (folded into the parent-key case)")
 
 
 if __name__ == "__main__":

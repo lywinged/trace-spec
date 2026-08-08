@@ -1,131 +1,377 @@
 """Completeness checks over the conformance vector sets.
 
 The other modules ask whether the vectors are *correct*. This one asks whether they are
-*complete*: does every obligation the verifier implements have at least one vector that
-notices when the obligation is gone?
+*complete*: does every obligation the verifier implements have vectors that notice when
+the obligation is gone — and notice it from more than one direction?
 
-Nothing here is maintained by hand. The rule inventory is recovered from the verifier's
-own source with `ast`, so a rule added without a vector is a failing test rather than a
-silent hole.
+The rule inventory is ``RULES``, the registry the verifier itself consumes. An earlier
+revision recovered the inventory from the verifier's source with ``ast``, and upstream
+#124's review identified the failure mode this creates: a rule written as
+``failures.extend([...])``, ``+=``, an f-string or a named constant is invisible to the
+walk, and the suite reports complete coverage over an inventory that is quietly missing
+entries. The registry inverts that. A check that is not registered never runs, so it
+cannot silently exist outside the inventory; and ``test_no_emission_outside_the_registry``
+is the residual guard for code that would try to emit around the registry.
 
-Four questions, in increasing strength:
+Mutation therefore targets **named rule hooks**: a rule is deleted by rebuilding the
+registry without its entry, or weakened by substituting its check — never by pattern-
+matching source text. Same review, same reason: mutate what the verifier actually
+consumes, so the mutation cannot drift away from the code under test.
 
-1. Does any fixture expect a code the verifier cannot produce? (dead expectations)
-2. Is every code the verifier can produce expected by some fixture? (unexercised rules)
-3. Does deleting each rule change at least one fixture's outcome? (obligations that are
-   named but not load-bearing, because another rule fires on the same input)
-4. Has any obligation's margin — the number of fixtures that notice its deletion —
-   dropped below what it was? (silent thinning)
+The questions, in increasing strength:
 
-**Recovering an inventory from source has its own failure mode**, and it is the mirror of
-the one it replaces. A hand-maintained list drifts when someone forgets to add to it. A
-source-derived list drifts when someone writes the rule in a shape the walk does not
-recognise: `failures.extend([...])`, `+=`, an alias, an f-string. The suite then reports
-complete coverage over an inventory that is quietly missing entries.
-`test_no_unrecognised_rule_idiom` is the guard for that, and it is expected to find
-nothing — the failure it prevents is the rule added months from now, not any rule today.
+1. Does any fixture expect a code the registry cannot produce? (dead expectations)
+2. Is every registered rule exercised by some fixture? (unexercised rules)
+3. Does deleting each rule change at least **two** fixtures' outcomes? (#124: single-
+   vector coverage has no margin — one fixture weakened or renamed away silently
+   removes a rule's coverage)
+4. Are two of those fixtures **independent** — is there a single plausible
+   implementation defect that one catches and the other misses? Two copies of the same
+   vector satisfy question 3 and fail this one.
+5. Has any rule's margin dropped below what it was? (silent thinning)
+
+Independence is #124's definition made executable. For every rule, ``DEFECTS`` declares
+at least one *weakened* variant of its check, each modelling a real implementation
+shortcut: comparing digest prefixes, case-insensitive identifier matching, structural
+signature validation without cryptography, clock-skew tolerances. A rule's vectors are
+independent when some declared defect deviates at least one of them from its expected
+outcome while leaving another undisturbed. The declaration is fail-closed: a registered
+rule with no defect entry fails the suite, so the question "what bug would your second
+vector catch that your first would not?" has to be answered when the rule is added,
+not after a regression demonstrates it.
 """
 
 from __future__ import annotations
 
 import ast
 import json
-import sys
-import types
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from tests.test_action_receipt_fixtures import (
+    ACTION_REF_FIELDS,
+    RULES,
+    STATUSES,
+    Rule,
+    _decode_base64url,
+    _receipt_age_seconds,
+    _sha256_jcs,
+    _trusted_jwk,
+    _verify_fixture,
+)
+
 TESTS_DIR = Path(__file__).parent
 VERIFIER_MODULE = TESTS_DIR / "test_action_receipt_fixtures.py"
 FIXTURE_DIR = TESTS_DIR.parent / "examples" / "action-receipts" / "conformance"
 MARGINS_FILE = TESTS_DIR / "vector_margins.json"
-FIXTURES = sorted(p for p in FIXTURE_DIR.rglob("*.json"))
+FIXTURES = sorted(FIXTURE_DIR.rglob("*.json"))
 
-RULE_COLLECTIONS = frozenset({"failures", "warnings"})
-
-# Codes a verifier may emit that no fixture can reasonably pin down, with the reason.
-# Kept empty on purpose: an entry here is a claim that an obligation is untestable, which
-# should have to be argued for in review rather than accumulated quietly.
-UNTESTABLE: dict[str, str] = {}
+RULE_CODES = tuple(rule.code for rule in RULES)
 
 
-@dataclass(frozen=True)
-class Site:
-    """One place the verifier emits a rule code."""
+# ---------------------------------------------------------------------------
+# Declared defects: one weakened check per rule, minimum
+# ---------------------------------------------------------------------------
 
-    lineno: int
-    code: str
-    kind: str  # "append" | "inline"
+Check = Callable[[dict[str, Any]], bool]
 
 
-def _source_tree() -> ast.Module:
-    return ast.parse(VERIFIER_MODULE.read_text(encoding="utf-8"))
+def _hash_prefix(value: str) -> str:
+    return value[:23]  # "sha256:" + 16 hex characters
 
 
-def _is_recognised_append(call: ast.Call) -> bool:
-    return (
-        isinstance(call.func, ast.Attribute)
-        and call.func.attr == "append"
-        and isinstance(call.func.value, ast.Name)
-        and call.func.value.id in RULE_COLLECTIONS
-        and len(call.args) == 1
-        and isinstance(call.args[0], ast.Constant)
-        and isinstance(call.args[0].value, str)
-    )
+def _ci_lookup(fixture: dict[str, Any], signed: dict[str, Any]) -> dict[str, str] | None:
+    """A key lookup that normalises case — the classic 'be liberal' shortcut."""
+    wanted = signed["issuer_key_id"].lower()
+    for key_id, jwk in fixture["trusted_issuer_keys"].items():
+        if key_id.lower() == wanted:
+            return jwk
+    return None
 
 
-def _rule_sites() -> list[Site]:
-    """Every place a rule code is emitted, in either shape the verifier uses.
-
-    Both shapes are returned so both are mutated. An earlier revision walked only
-    `append` calls, which left the two codes emitted through inline literal lists on
-    early returns outside the strong criterion — a gap that existed because of the shape
-    of the code rather than for any reason of principle.
-    """
-    sites: list[Site] = []
-    for node in ast.walk(_source_tree()):
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-            if _is_recognised_append(node.value):
-                sites.append(Site(node.lineno, node.value.args[0].value, "append"))
-        if isinstance(node, ast.keyword) and node.arg in RULE_COLLECTIONS:
-            if isinstance(node.value, ast.List):
-                for element in node.value.elts:
-                    if isinstance(element, ast.Constant) and isinstance(element.value, str):
-                        sites.append(Site(element.lineno, element.value, "inline"))
-    return sites
+def _sig_malformed(signed: dict[str, Any]) -> bool:
+    """Structural validation only: decodes and length-checks, never verifies."""
+    try:
+        return len(_decode_base64url(signed["signature"])) != 64
+    except ValueError:
+        return True
 
 
-def _declared_statuses() -> set[str]:
-    """Every status the verifier can return, read from its source."""
-    statuses: set[str] = set()
-    tree = _source_tree()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.keyword) and node.arg == "status":
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                statuses.add(node.value.value)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(isinstance(t, ast.Name) and t.id == "status" for t in node.targets):
-            continue
-        # Only the branches of a conditional are statuses. Walking the whole value would
-        # also collect the literal being compared against in the test.
-        values = (
-            [node.value.body, node.value.orelse]
-            if isinstance(node.value, ast.IfExp)
-            else [node.value]
+def _recomputed_action_ref(fixture: dict[str, Any]) -> str:
+    return _sha256_jcs({name: fixture["action"][name] for name in ACTION_REF_FIELDS})
+
+
+DEFECTS: dict[str, dict[str, Check]] = {
+    # An implementation that tests key presence rather than null-ness treats an
+    # explicit `"receipt": null` as a receipt.
+    "receipt_missing": {
+        "treats_explicit_null_as_present": lambda f: "receipt" not in f,
+    },
+    # Digest comparisons shortened to a prefix — log-friendly truncation that leaks
+    # into the comparison.
+    "action_ref_invalid": {
+        "compares_truncated_digest": lambda f: _hash_prefix(_recomputed_action_ref(f))
+        != _hash_prefix(f["action"]["action_ref"]),
+    },
+    "action_ref_mismatch": {
+        "compares_truncated_digest": lambda f: _hash_prefix(f["receipt"]["action_ref"])
+        != _hash_prefix(f["action"]["action_ref"]),
+    },
+    "evidence_hash_mismatch": {
+        "compares_truncated_digest": lambda f: _hash_prefix(f["receipt"]["evidence_hash"])
+        != _hash_prefix(_sha256_jcs(f["evidence"])),
+    },
+    "receipt_chain_gap": {
+        "compares_truncated_digest": lambda f: _hash_prefix(
+            f["receipt"]["previous_receipt_hash"]
         )
-        for value in values:
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                statuses.add(value.value)
-    return statuses
+        != _hash_prefix(f["context"]["expected_previous_receipt_hash"]),
+    },
+    # Identifier comparisons that normalise case, as URL- and DID-handling code
+    # habitually does.
+    "call_id_mismatch": {
+        "compares_case_insensitively": lambda f: f["receipt"]["linked_call_id"].lower()
+        != f["context"]["call_id"].lower(),
+    },
+    "session_id_mismatch": {
+        "compares_case_insensitively": lambda f: f["receipt"]["session_id"].lower()
+        != f["context"]["session_id"].lower(),
+    },
+    "issuer_key_unknown": {
+        "looks_up_keys_case_insensitively": lambda f: _ci_lookup(f, f["receipt"]) is None,
+    },
+    "decision_invalid": {
+        "matches_enum_case_insensitively": lambda f: f["receipt"]["decision"].lower()
+        not in {"accepted", "rejected"},
+    },
+    "unsupported_physical_completion_claim": {
+        "compares_case_insensitively": lambda f: f["evidence"][
+            "physical_completion_claim"
+        ].lower()
+        != "none",
+    },
+    # A signature check that stops at well-formedness.
+    "signature_or_key_mismatch": {
+        "checks_structure_only": lambda f: _trusted_jwk(f, f["receipt"]) is not None
+        and _sig_malformed(f["receipt"]),
+    },
+    # Freshness windows padded with tolerance an operator once asked for.
+    "receipt_stale": {
+        "grants_sixty_seconds_grace": lambda f: _receipt_age_seconds(f)
+        > f["context"]["max_receipt_age_seconds"] + 60,
+    },
+    "receipt_from_future": {
+        "tolerates_sixty_seconds_skew": lambda f: _receipt_age_seconds(f) < -60,
+    },
+    # A warning wired to the happy path only.
+    "issuer_not_independent": {
+        "warns_only_on_accepted": lambda f: f["receipt"]["issuer_independence"]
+        == "gateway_self_report"
+        and f["receipt"]["decision"] == "accepted",
+    },
+    # -- disclosure rules ---------------------------------------------------
+    "disclosure_key_unknown": {
+        "looks_up_keys_case_insensitively": lambda f: _ci_lookup(f, f["gap_disclosure"])
+        is None,
+    },
+    "disclosure_signature_invalid": {
+        "checks_structure_only": lambda f: _trusted_jwk(f, f["gap_disclosure"]) is not None
+        and _sig_malformed(f["gap_disclosure"]),
+    },
+    "disclosure_issuer_not_chain_key": {
+        "matches_keys_case_insensitively": lambda f: f["gap_disclosure"][
+            "issuer_key_id"
+        ].lower()
+        not in {
+            f["context"]["chain"]["predecessor_issuer_key_id"].lower(),
+            *(k.lower() for k in f["context"]["chain"]["permitted_ancestor_key_ids"]),
+        },
+    },
+    "disclosure_stream_mismatch": {
+        "compares_case_insensitively": lambda f: f["gap_disclosure"]["session_id"].lower()
+        != f["context"]["session_id"].lower(),
+    },
+    "disclosure_predecessor_absent": {
+        "compares_truncated_link": lambda f: _hash_prefix(
+            f["gap_disclosure"]["previous_receipt_hash"]
+        )
+        != _hash_prefix(f["context"]["chain"]["predecessor_hash"])
+        or not f["context"]["chain"]["predecessor_present"],
+    },
+    "disclosure_not_sealed_by_successor": {
+        "compares_truncated_link": lambda f: f["context"]["chain"]["successor_present"]
+        and _hash_prefix(f["context"]["chain"]["successor_previous_receipt_hash"])
+        != _hash_prefix(_sha256_jcs(f["gap_disclosure"])),
+    },
+    # A contradiction check reached only on the sealed path, so an unsealed tail
+    # disclosure is never cross-examined.
+    "disclosure_contradicted": {
+        "checks_only_when_sealed": lambda f: bool(
+            f["context"]["chain"]["claimed_absent_but_present"]
+        )
+        and f["context"]["chain"]["successor_present"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Running the verifier under mutation
+# ---------------------------------------------------------------------------
+
+Outcome = tuple[str, str, tuple[str, ...], tuple[str, ...]]
 
 
 def _expected(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))["expected"]
+
+
+def _outcomes(rules: tuple[Rule, ...]) -> list[Outcome]:
+    """Full outcome per fixture: status, failures and warnings.
+
+    Status alone is too coarse. Under a status-only comparison a warning can never be
+    load-bearing by construction, which reads as "warnings are untestable" when it is
+    only an artifact of what is being compared.
+    """
+    results: list[Outcome] = []
+    for path in FIXTURES:
+        fixture = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            r = _verify_fixture(fixture, rules)
+            results.append((path.name, r.status, tuple(r.failures), tuple(r.warnings)))
+        except Exception as exc:  # a mutation that breaks the verifier still counts
+            results.append((path.name, f"raised:{type(exc).__name__}", (), ()))
+    return results
+
+
+def _baseline() -> list[Outcome]:
+    return [
+        (path.name, e["status"], tuple(e.get("failures", [])), tuple(e.get("warnings", [])))
+        for path, e in ((p, _expected(p)) for p in FIXTURES)
+    ]
+
+
+BASELINE = _baseline()
+
+
+def _without(code: str) -> tuple[Rule, ...]:
+    return tuple(rule for rule in RULES if rule.code != code)
+
+
+def _weakened(code: str, check: Check) -> tuple[Rule, ...]:
+    return tuple(
+        replace(rule, check=check) if rule.code == code else rule for rule in RULES
+    )
+
+
+def _deviating(rules: tuple[Rule, ...]) -> set[str]:
+    """Fixture names whose outcome under `rules` departs from their expected block."""
+    return {
+        was[0]
+        for was, now in zip(BASELINE, _outcomes(rules), strict=True)
+        if was != now
+    }
+
+
+def _margin(code: str) -> set[str]:
+    """The fixtures that notice this rule's deletion."""
+    return _deviating(_without(code))
+
+
+# ---------------------------------------------------------------------------
+# 0. Guards on the instrument itself
+# ---------------------------------------------------------------------------
+
+
+def test_registry_is_well_formed() -> None:
+    """Vacuity and hygiene: the inventory below is only as good as the registry."""
+    assert FIXTURES, "no fixtures found"
+    assert len(RULES) >= 20, "the registry lost most of its entries"
+    assert len(set(RULE_CODES)) == len(RULE_CODES), "duplicate rule codes in the registry"
+    assert all(rule.severity in {"failure", "warning"} for rule in RULES)
+    assert all(rule.path in {"receipt", "disclosure", "missing"} for rule in RULES)
+
+
+def test_no_emission_outside_the_registry() -> None:
+    """Nothing in the verifier may emit a code around the registry.
+
+    The registry is the inventory *because* `_evaluate` is the only place a code is
+    emitted. This walks the verifier's source and fails on: an append to a failure or
+    warning collection anywhere else, or a literal code smuggled into a result's
+    `failures=`/`warnings=` argument. One literal is allowed by name —
+    `receipt_gap_disclosed`, the advisory that echoes the status on the valid
+    disclosure path; it states an outcome rather than enforcing an obligation, which
+    is why it is not a rule.
+    """
+    tree = ast.parse(VERIFIER_MODULE.read_text(encoding="utf-8"))
+
+    enclosing: dict[ast.AST, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            for child in ast.walk(node):
+                enclosing.setdefault(child, node.name)
+
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"append", "extend", "insert"}
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in {"failures", "warnings"}
+            and enclosing.get(node) != "_evaluate"
+        ):
+            findings.append(
+                f"line {node.lineno}: {node.func.value.id}.{node.func.attr}(...) outside "
+                "_evaluate"
+            )
+        if isinstance(node, ast.keyword) and node.arg in {"failures", "warnings"}:
+            if isinstance(node.value, ast.List):
+                for element in node.value.elts:
+                    if (
+                        isinstance(element, ast.Constant)
+                        and isinstance(element.value, str)
+                        and element.value != "receipt_gap_disclosed"
+                    ):
+                        findings.append(
+                            f"line {element.lineno}: literal {element.value!r} in a "
+                            f"{node.arg}= argument bypasses the registry"
+                        )
+
+    assert not findings, (
+        "the verifier emits outside the registry, so the inventory is incomplete:\n  "
+        + "\n  ".join(findings)
+    )
+
+
+def test_registry_codes_are_literals() -> None:
+    """Every `Rule(...)` names its code as a string literal.
+
+    Not needed at runtime — the imported registry is the ground truth either way —
+    but a computed code would make the registry unreadable in review, and reviewability
+    is half of what the registry is for.
+    """
+    tree = ast.parse(VERIFIER_MODULE.read_text(encoding="utf-8"))
+    computed = [
+        f"line {node.lineno}"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "Rule"
+        and node.args
+        and not (
+            isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)
+        )
+    ]
+    assert not computed, f"Rule() calls with computed codes: {computed}"
+
+
+# ---------------------------------------------------------------------------
+# 1-2. Cheap diagnostics
+# ---------------------------------------------------------------------------
 
 
 def _codes_expected_by_fixtures() -> set[str]:
@@ -137,84 +383,18 @@ def _codes_expected_by_fixtures() -> set[str]:
     return codes
 
 
-# ---------------------------------------------------------------------------
-# 0. Guards on the instrument itself
-# ---------------------------------------------------------------------------
-
-
-def test_rule_inventory_was_actually_recovered() -> None:
-    """A vacuity guard: if the walk matched nothing, everything below passes emptily."""
-    assert len(_rule_sites()) >= 15
-    assert _declared_statuses(), "no status values recovered from the verifier source"
-    assert FIXTURES, "no fixtures found"
-
-
-def test_no_unrecognised_rule_idiom() -> None:
-    """No rule may be emitted in a shape the inventory cannot see.
-
-    Expected to find nothing. That is the point: this does not check today's coverage,
-    it prevents a future rule from joining the verifier in a shape that keeps it out of
-    the inventory while the suite still reports complete.
-    """
-    findings: list[str] = []
-    tree = _source_tree()
-    lines = VERIFIER_MODULE.read_text(encoding="utf-8").splitlines()
-
-    def src(node: ast.AST) -> str:
-        return lines[node.lineno - 1].strip() if 0 < node.lineno <= len(lines) else "?"
-
-    for node in ast.walk(tree):
-        # A method other than append on a rule collection: extend, insert, __setitem__.
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            target = node.func.value
-            if isinstance(target, ast.Name) and target.id in RULE_COLLECTIONS:
-                if not _is_recognised_append(node):
-                    findings.append(
-                        f"line {node.lineno}: {target.id}.{node.func.attr}(...) is not "
-                        f'the append("literal") shape the inventory reads — {src(node)}'
-                    )
-        # failures += [...]
-        if isinstance(node, ast.AugAssign):
-            if isinstance(node.target, ast.Name) and node.target.id in RULE_COLLECTIONS:
-                findings.append(
-                    f"line {node.lineno}: {node.target.id} extended by augmented "
-                    f"assignment, which the inventory does not walk — {src(node)}"
-                )
-        # f = failures; every later f.append(...) is invisible, since the walk keys on name
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name):
-            if node.value.id in RULE_COLLECTIONS:
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id not in RULE_COLLECTIONS:
-                        findings.append(
-                            f"line {node.lineno}: {target.id} aliases {node.value.id}; "
-                            f"appends through the alias are invisible — {src(node)}"
-                        )
-
-    assert not findings, (
-        "the verifier emits rules in shapes the inventory cannot recover, so coverage "
-        "would be reported over an incomplete rule set:\n  " + "\n  ".join(findings)
-    )
-
-
-# ---------------------------------------------------------------------------
-# 1-2. Cheap diagnostics
-# ---------------------------------------------------------------------------
-
-
-def test_no_fixture_expects_a_code_the_verifier_cannot_emit() -> None:
+def test_no_fixture_expects_a_code_the_registry_cannot_emit() -> None:
     """A fixture naming a code nothing produces holds an assertion that cannot fail."""
-    emitted = {site.code for site in _rule_sites()}
-    orphans = _codes_expected_by_fixtures() - emitted
+    orphans = _codes_expected_by_fixtures() - set(RULE_CODES) - {"receipt_gap_disclosed"}
     assert not orphans, (
-        f"fixtures expect codes the verifier can never produce: {sorted(orphans)}. "
+        f"fixtures expect codes no registered rule produces: {sorted(orphans)}. "
         "Either the rule was removed and the fixture kept, or the code is misspelled — "
         "in both cases the fixture is no longer testing anything."
     )
 
 
-def test_every_verifier_rule_is_exercised_by_some_fixture() -> None:
-    emitted = {site.code for site in _rule_sites()}
-    unexercised = sorted(emitted - _codes_expected_by_fixtures() - set(UNTESTABLE))
+def test_every_registered_rule_is_exercised_by_some_fixture() -> None:
+    unexercised = sorted(set(RULE_CODES) - _codes_expected_by_fixtures())
     assert not unexercised, (
         f"{len(unexercised)} obligation(s) have no conformance vector: {unexercised}. "
         "Each is a check a conforming implementation could omit entirely and still pass."
@@ -222,127 +402,95 @@ def test_every_verifier_rule_is_exercised_by_some_fixture() -> None:
 
 
 def test_every_declared_outcome_is_reached_by_some_fixture() -> None:
-    reachable = _declared_statuses()
     reached = {_expected(path)["status"] for path in FIXTURES}
-    assert not sorted(reachable - reached), (
+    assert not sorted(STATUSES - reached), (
         f"outcomes the verifier can return that no fixture produces: "
-        f"{sorted(reachable - reached)}"
+        f"{sorted(STATUSES - reached)}"
     )
-    assert not sorted(reached - reachable), (
-        f"fixtures expect outcomes the verifier cannot return: {sorted(reached - reachable)}"
+    assert not sorted(reached - STATUSES), (
+        f"fixtures expect outcomes the verifier cannot return: {sorted(reached - STATUSES)}"
     )
 
 
 # ---------------------------------------------------------------------------
-# 3-4. The strong criterion, and the ratchet on it
+# 3-4. Margin and independence
 # ---------------------------------------------------------------------------
 
-Outcome = tuple[str, str, tuple[str, ...], tuple[str, ...]]
 
+@pytest.mark.parametrize("code", RULE_CODES)
+def test_each_rule_is_load_bearing_for_two_fixtures(code: str) -> None:
+    """Deleting an obligation must change at least two fixtures' outcomes.
 
-def _outcomes(verify: Any) -> list[Outcome]:
-    """Full outcome per fixture: status, failures and warnings.
-
-    Status alone is too coarse. Under a status-only comparison a warning can never be
-    load-bearing by construction, which reads as "warnings are untestable" when it is
-    only an artifact of what is being compared.
+    One is existence; two is margin. With a single load-bearing vector, any change
+    that weakens or retires that vector silently removes the rule's coverage — the
+    failure mode #124 exists to close. A rule here has margin two only if both
+    vectors independently notice its deletion, so a vector that merely *names* the
+    rule while another rule fires on its input does not count.
     """
-    results: list[Outcome] = []
-    for path in FIXTURES:
-        fixture = json.loads(path.read_text(encoding="utf-8"))
-        try:
-            r = verify(fixture)
-            results.append((path.name, r.status, tuple(r.failures), tuple(r.warnings)))
-        except Exception as exc:  # a removal that breaks the verifier still counts
-            results.append((path.name, f"raised:{type(exc).__name__}", (), ()))
-    return results
-
-
-def _run_with_site_dropped(site: Site) -> list[Outcome]:
-    """Re-execute the verifier with one emission site removed."""
-    tree = _source_tree()
-
-    class Drop(ast.NodeTransformer):
-        def visit_Expr(self, node: ast.Expr) -> ast.AST:
-            # `pass`, not deletion: a rule that is the sole body of an `if` or `except`
-            # would leave an empty block, and the mutant would fail to compile — which
-            # reads as "the rule matters" for the wrong reason.
-            if site.kind == "append" and node.lineno == site.lineno:
-                return ast.copy_location(ast.Pass(), node)
-            return node
-
-        def visit_keyword(self, node: ast.keyword) -> ast.AST:
-            if site.kind == "inline" and node.arg in RULE_COLLECTIONS:
-                if isinstance(node.value, ast.List):
-                    node.value.elts = [
-                        e
-                        for e in node.value.elts
-                        if not (
-                            isinstance(e, ast.Constant)
-                            and e.value == site.code
-                            and e.lineno == site.lineno
-                        )
-                    ]
-            return node
-
-    mutated = ast.fix_missing_locations(Drop().visit(tree))
-
-    # The mutant must be a registered module: `@dataclass` resolves
-    # `sys.modules[cls.__module__]`, so exec'ing into a bare dict raises before a single
-    # fixture runs — which would read as "every rule matters" while testing nothing.
-    name = f"_mutant_verifier_{site.kind}_{site.lineno}"
-    module = types.ModuleType(name)
-    module.__file__ = str(VERIFIER_MODULE)
-    sys.modules[name] = module
-    try:
-        exec(compile(mutated, str(VERIFIER_MODULE), "exec"), module.__dict__)  # noqa: S102
-        return _outcomes(module.__dict__["_verify_fixture"])
-    finally:
-        del sys.modules[name]
-
-
-def _baseline() -> list[Outcome]:
-    return [
-        (path.name, e["status"], tuple(e.get("failures", [])), tuple(e.get("warnings", [])))
-        for path, e in ((p, _expected(p)) for p in FIXTURES)
-    ]
-
-
-BASELINE = _baseline()
-SITES = _rule_sites()
-
-
-def _margin(site: Site) -> int:
-    """How many fixtures notice this site's removal."""
-    mutated = _run_with_site_dropped(site)
-    return sum(1 for was, now in zip(BASELINE, mutated, strict=True) if was != now)
-
-
-@pytest.mark.parametrize("site", SITES, ids=lambda s: f"{s.kind}:{s.lineno}:{s.code}")
-def test_each_rule_is_load_bearing_for_some_fixture(site: Site) -> None:
-    """Deleting an obligation must change at least one fixture's outcome.
-
-    An obligation can be named by a fixture and still not be load-bearing: if another
-    rule fires on the same input, removing this one changes nothing, and a conforming
-    implementation could skip it entirely while passing.
-    """
-    assert _margin(site) > 0, (
-        f"removing the site that emits {site.code!r} (line {site.lineno}, {site.kind}) "
-        "changed no fixture outcome. No vector distinguishes an implementation that "
-        "performs this check from one that skips it."
+    margin = _margin(code)
+    assert len(margin) >= 2, (
+        f"removing rule {code!r} changed {len(margin)} fixture outcome(s) "
+        f"({sorted(margin)}). Two independent vectors are required per rule; with "
+        "fewer, coverage rests on a single fixture and disappears with it."
     )
+
+
+def test_every_rule_declares_a_defect() -> None:
+    """Fail closed: registering a rule requires declaring what its second vector adds.
+
+    A rule with no weakened variant cannot demonstrate that its vectors are
+    independent rather than copies, so the declaration is part of adding the rule —
+    the mirror of the registry requirement on the verifier side.
+    """
+    missing = sorted(set(RULE_CODES) - set(DEFECTS))
+    assert not missing, f"registered rules with no declared defect variant: {missing}"
+    stale = sorted(set(DEFECTS) - set(RULE_CODES))
+    assert not stale, f"defects declared for rules that no longer exist: {stale}"
+
+
+@pytest.mark.parametrize("code", RULE_CODES)
+def test_vectors_for_each_rule_are_independent(code: str) -> None:
+    """#124's criterion, executed: some single defect separates the rule's vectors.
+
+    For at least one declared weakening of the rule, one load-bearing vector must
+    catch the defective implementation (its outcome deviates from expected) while
+    another passes it. If every declared defect moves all of a rule's vectors
+    together, the vectors are redundant copies: every implementation shortcut they
+    can detect, they detect identically, and the second vector adds count without
+    margin.
+    """
+    bearing = _margin(code)
+    if len(bearing) < 2:
+        pytest.fail(f"rule {code!r} lacks two load-bearing vectors; margin test covers this")
+
+    separations = {}
+    for name, weakened_check in DEFECTS[code].items():
+        caught = _deviating(_weakened(code, weakened_check)) & bearing
+        if 0 < len(caught) < len(bearing):
+            separations[name] = sorted(caught)
+
+    assert separations, (
+        f"no declared defect separates the vectors for {code!r}: every weakening "
+        f"either fools all of {sorted(bearing)} or none of them. The vectors are "
+        "mutually redundant — author one that catches a defect the others miss, or "
+        "declare a defect that tells them apart."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 5. The ratchet
+# ---------------------------------------------------------------------------
 
 
 def test_margins_have_not_thinned() -> None:
-    """A ratchet, not a threshold: coverage may not silently get thinner.
+    """A ratchet above the floor: coverage may not silently get thinner.
 
-    A young suite legitimately sits at margin 1 for most obligations, so a threshold
-    would either fail on day one or be set so low it never fires. Recording the current
-    margins and failing on a decrease says only that a change which reduces coverage has
-    to be deliberate. Raising a recorded margin is an ordinary PR; lowering one is a
-    decision someone has to make on purpose.
+    The floor is two. Anything above it that exists today — a rule three or four
+    fixtures notice — may not quietly decay back toward the floor: lowering a
+    recorded margin is a decision someone has to make on purpose, in the same commit,
+    with a reason. Raising one is an ordinary PR.
     """
-    current = {f"{s.code}@{s.kind}": _margin(s) for s in SITES}
+    current = {code: len(_margin(code)) for code in RULE_CODES}
 
     if not MARGINS_FILE.exists():
         MARGINS_FILE.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
@@ -363,6 +511,6 @@ def test_margins_have_not_thinned() -> None:
 
     vanished = sorted(set(recorded) - set(current))
     assert not vanished, (
-        f"obligations that had recorded margins no longer exist: {vanished}. If they were "
+        f"rules that had recorded margins no longer exist: {vanished}. If they were "
         f"removed on purpose, drop them from {MARGINS_FILE.name} in the same commit."
     )

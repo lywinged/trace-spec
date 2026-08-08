@@ -64,10 +64,14 @@ def _has(key: str) -> list[Path]:
     A `1*.json` glob selected the gap fixtures until seven receipt fixtures numbered
     18 and 19 appeared and were silently pulled in. Selection by shape cannot drift
     when the set is renumbered.
+
+    Presence means a non-null value: the explicit-null-receipt vector carries the
+    `receipt` key precisely so that presence-checking implementations misread it,
+    and this selector must not be one of them.
     """
     out = []
     for path in ALL_RECEIPT_FIXTURES:
-        if key in json.loads(path.read_text(encoding="utf-8")):
+        if json.loads(path.read_text(encoding="utf-8")).get(key) is not None:
             out.append(path)
     return out
 
@@ -81,6 +85,10 @@ RECEIPT_FIXTURES = _has("receipt")
 SIGNATURE_FREE = {
     "03-missing-required-receipt.json": (
         "the absence of a receipt is the case under test, so there is no signature"
+    ),
+    "17-missing-receipt-explicit-null.json": (
+        "the receipt is an explicit null — the same absence through a different "
+        "door, and equally without a signature"
     ),
 }
 
