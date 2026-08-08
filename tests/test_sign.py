@@ -512,7 +512,9 @@ def test_vector_superseded_v0_1_profile_is_refused():
     """spec/trace-v0.2.md: a v0.2 verifier MUST reject the v0.1 identifier."""
     record, jwk = _record_with_profile(TRACE_PROFILE_V0_1)
 
-    with pytest.raises(ValueError, match="not in this verifier's accepted set"):
+    # Upstream #125's tailored message for this case, kept through the merge: the
+    # v0.1 identifier is named as superseded, not merely absent from the accepted set.
+    with pytest.raises(ValueError, match="superseded v0.1 profile"):
         verify_record(record, jwk)
 
     assert TRACE_PROFILE_V0_1 not in DEFAULT_ACCEPTED_PROFILES, (

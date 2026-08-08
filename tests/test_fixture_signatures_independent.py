@@ -54,7 +54,7 @@ def _verify(signed: dict[str, Any], jwk: dict[str, str]) -> None:
 RECEIPT_DIR = EXAMPLES / "action-receipts" / "conformance"
 COMPAT_DIR = EXAMPLES / "verifier-compatibility"
 
-ALL_RECEIPT_FIXTURES = sorted(RECEIPT_DIR.glob("*.json"))
+ALL_RECEIPT_FIXTURES = sorted(RECEIPT_DIR.rglob("*.json"))
 COMPAT_FIXTURES = sorted(COMPAT_DIR.glob("*.json"))
 
 

@@ -42,7 +42,7 @@ TESTS_DIR = Path(__file__).parent
 VERIFIER_MODULE = TESTS_DIR / "test_action_receipt_fixtures.py"
 FIXTURE_DIR = TESTS_DIR.parent / "examples" / "action-receipts" / "conformance"
 MARGINS_FILE = TESTS_DIR / "vector_margins.json"
-FIXTURES = sorted(FIXTURE_DIR.glob("*.json"))
+FIXTURES = sorted(p for p in FIXTURE_DIR.rglob("*.json"))
 
 RULE_COLLECTIONS = frozenset({"failures", "warnings"})
 

@@ -55,7 +55,7 @@
   },
   "expected": {
     "outcome": "refused",
-    "failure": "profile_not_accepted",
+    "failure": "superseded_profile_refused",
     "statement": null
   }
 }

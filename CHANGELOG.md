@@ -11,7 +11,25 @@ Format: [Semantic Versioning](https://semver.org/). Spec versions follow `MAJOR.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-07
+
+### Fixed
+
+- **`__version__` reported the wrong number for four releases.** It was a literal that drifted from `pyproject.toml` at #36 and was never corrected, so v0.3.0, v0.4.0, v0.5.0 and v0.5.1 each shipped a wheel reporting `0.2.0` at runtime. Anyone pinning or logging on `agentrust_trace.__version__` got the wrong answer, and nothing failed. It now derives from installed package metadata, which makes the two unable to disagree, and `tests/test_version.py` pins the source tree against `pyproject.toml` and requires the changelog to carry a section for the declared version before a tag is cut.
+
+- **The package description advertised TRACE v0.1.** The PyPI summary still named the superseded profile.
+
 ### Added
+
+- **`TraceSandboxAdapter`: Trust Records from a sandboxed agent runtime.** A kernel sandbox confines one agent on one machine. It does not answer, on its own, which agent on which of two hundred machines took an action, what actually ran rather than what the policy said, or how to say either on a host with no secure hardware. The adapter builds a record from what such a runtime already has at session close: sandbox identity, image digest, the effective policy bundle bytes, and the decision log. No change to the runtime is required.
+
+  Unlike `TraceAGTAdapter`, one code path spans Level 0 and Level 1. Passing a `SandboxAttestation` moves the record from `software-only` to the attested platform and nothing else about the call changes, because a sandbox runs wherever the customer runs it and the deployments that most need evidence often have the least hardware.
+
+  A caller cannot claim hardware it does not have: `platform` is only ever set from a supplied attestation, an attestation may not name `software-only`, the platform is validated against the enum on `RuntimeInfo` rather than a copy of it, and the measurement must be a `sha256:`/`sha384:` digest. Sandbox identity and image ride the existing `subject` and `build_provenance.digest`, so no schema change was needed.
+
+  Two defaults differ from the AGT adapter, deliberately. `appraisal.status` is `"none"`, because building a record does not appraise it and `affirming` would put a verdict in the field a consumer reads to find out whether anybody checked. `transparency` is `None` and omitted, which is what an unanchored record should say.
+
+  `tool_transcript.hash` is taken over the RFC 8785 canonical form of the decision log rather than `json.dumps(sort_keys=True)`. The two agree on ASCII and diverge on non-ASCII strings and number formatting; a decision log carries paths and hostnames, and the signature pre-image already uses JCS. See `docs/integration/sandbox-runtime.md` and `examples/sandbox-runtime.json`.
 
 - **`verify_record(..., revocation=...)` enforces key revocation at verification time (#76).** §3.2.1 has always required that "Verifiers MUST consult current revocation status at verification time", but `verify_record()` checked only signature and freshness, so a record signed by a revoked or compromised key kept verifying. The new `revocation` parameter accepts either a container of revoked key identifiers or a callable performing a live CRL, status-endpoint, or SCITT lookup. A listed key is rejected, and a store that cannot answer is also rejected: an unavailable revocation source is not evidence that a key is unrevoked.
 
@@ -54,6 +72,10 @@ Format: [Semantic Versioning](https://semver.org/). Spec versions follow `MAJOR.
   Moved together: `spec/trace-v0.2.md` (new, with a "Changes from v0.1" section), `spec/trace-v0.1.md` (retained, marked superseded), the root `schema/trace-claim.json` const, the packaged `agentrust_trace/schema/trace-v0.2.json`, the `eat_profile` `Literal` in `models.py`, the AGT adapter, `validate.py`'s schema resource, the four platform example records, and the docs.
 
 - Other `agentrust.io` URLs moved to `agentrust-io.com`: the registry and verifier hosts in the AGT adapter and the schema `$id`.
+
+### Fixed
+
+- **`verify_record()` now enforces the profile cutover this changelog already declares.** The entry above states that a v0.2 verifier "requires the new URI and rejects the old one; it does not accept both" — but `verify_record()` never read `eat_profile`, so a record carrying the v0.1 identifier, a future version, a foreign tag, or no profile at all verified exactly as a v0.2 record, provided its signature checked out. A valid signature over semantics this build does not implement is not evidence, so the profile is now checked first, before any cryptographic work: anything other than `TRACE_PROFILE_V0_2` (newly exported) raises `ValueError`, with a message that says why when the profile is the superseded v0.1 identifier. Same shape as the revocation fix above: an already-merged spec requirement (`spec/trace-v0.2.md` section 2) that the reference implementation did not carry out. `docs/verification.md` step 4 notes the check is now built in. No normative text, schema, or record field changed.
 
 ## [0.4.0]
 

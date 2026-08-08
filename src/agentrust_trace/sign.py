@@ -390,6 +390,15 @@ def verify_record(
             "record was written under, and a verifier cannot supply it by assumption"
         )
     if profile not in accepted:
+        if profile == TRACE_PROFILE_V0_1:
+            # Upstream's #125 names this case specifically, and the tailored message
+            # is worth keeping: the generic refusal would be true but less useful.
+            raise ValueError(
+                f"record carries the superseded v0.1 profile {profile!r}. "
+                "spec/trace-v0.2.md section 2: the cutover is cutover, not "
+                "coexistence — a v0.2 verifier rejects the v0.1 identifier, which "
+                "was minted under a domain the project does not own."
+            )
         raise ValueError(
             f"record profile {profile!r} is not in this verifier's accepted set "
             f"{list(accepted)}. Verification is refused rather than attempted: a valid "

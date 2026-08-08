@@ -30,6 +30,9 @@ FAILURE_MARKERS = {
     "profile_absent": "no 'eat_profile'",
     "no_accepted_profiles": "accepted_profiles is empty",
     "superseded_profile_in_accepted_set": "superseded v0.1 identifier",
+    # A record *carrying* the v0.1 identifier is refused with upstream #125's tailored
+    # message, distinct from the generic not-in-accepted-set refusal above.
+    "superseded_profile_refused": "superseded v0.1 profile",
 }
 
 V0_1 = "tag:agentrust.io,2026:trace-v0.1"

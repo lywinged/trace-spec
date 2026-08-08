@@ -245,11 +245,13 @@ def _verify_fixture(fixture: dict[str, Any]) -> ReceiptResult:
     )
 
 
-FIXTURE_PATHS = sorted(FIXTURE_DIR.glob("*.json"))
+FIXTURE_PATHS = sorted(FIXTURE_DIR.rglob("*.json"))
 
 
 def test_fixture_set_is_complete() -> None:
-    assert [path.name for path in FIXTURE_PATHS] == [
+    """The top level mirrors upstream's numbering exactly; proposal-bound vectors
+    live under `proposal-117/` so the two ranges can never collide again."""
+    assert [p.relative_to(FIXTURE_DIR).as_posix() for p in FIXTURE_PATHS] == [
         "01-valid-controller-accepted.json",
         "02-valid-controller-rejected.json",
         "03-missing-required-receipt.json",
@@ -259,24 +261,23 @@ def test_fixture_set_is_complete() -> None:
         "07-receipt-chain-gap.json",
         "08-same-party-self-report.json",
         "09-unsupported-physical-completion.json",
-        "10-gap-disclosed-valid.json",
-        "11-gap-disclosure-dangling-predecessor.json",
-        "12-gap-disclosure-successor-does-not-link.json",
-        "13-gap-disclosure-contradicted.json",
-        "14-gap-disclosure-foreign-key.json",
-        "15-gap-disclosed-parent-key-null-estimate.json",
-        "16-gap-disclosure-unknown-key.json",
-        "17-gap-disclosure-tampered.json",
-        # 18-24 close the receipt rules that had no vector at all. Each was a check a
-        # conforming implementation could have omitted entirely while passing this
-        # suite; `test_vector_completeness.py` is what found them.
-        "18-action-ref-not-recomputable.json",
-        "19-call-id-mismatch.json",
-        "20-session-id-mismatch.json",
-        "21-evidence-hash-mismatch.json",
-        "22-receipt-issuer-key-unknown.json",
-        "23-receipt-from-future.json",
-        "24-decision-not-in-enum.json",
+        # 10-16 close the receipt rules that had no vector at all, merged upstream as
+        # PR #122; `test_vector_completeness.py` is what found them.
+        "10-action-ref-not-recomputable.json",
+        "11-call-id-mismatch.json",
+        "12-session-id-mismatch.json",
+        "13-evidence-hash-mismatch.json",
+        "14-receipt-issuer-key-unknown.json",
+        "15-receipt-from-future.json",
+        "16-decision-not-in-enum.json",
+        "proposal-117/01-gap-disclosed-valid.json",
+        "proposal-117/02-gap-disclosure-dangling-predecessor.json",
+        "proposal-117/03-gap-disclosure-successor-does-not-link.json",
+        "proposal-117/04-gap-disclosure-contradicted.json",
+        "proposal-117/05-gap-disclosure-foreign-key.json",
+        "proposal-117/06-gap-disclosed-parent-key-null-estimate.json",
+        "proposal-117/07-gap-disclosure-unknown-key.json",
+        "proposal-117/08-gap-disclosure-tampered.json",
     ]
 
 

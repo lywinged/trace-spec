@@ -148,10 +148,10 @@ def main() -> None:
     f["receipt"]["action_ref"] = forged  # keep them equal, so only the digest rule fires
     body = rfc8785.dumps({k: v for k, v in f["receipt"].items() if k != "signature"})
     f["receipt"]["signature"] = b64u(KEY.sign(body))
-    fixtures.append(("18-action-ref-not-recomputable.json", f))
+    fixtures.append(("10-action-ref-not-recomputable.json", f))
 
     fixtures.append((
-        "19-call-id-mismatch.json",
+        "11-call-id-mismatch.json",
         build(
             "call-id-mismatch",
             "An authentic receipt bound to a different call. Without this check a valid "
@@ -162,7 +162,7 @@ def main() -> None:
     ))
 
     fixtures.append((
-        "20-session-id-mismatch.json",
+        "12-session-id-mismatch.json",
         build(
             "session-id-mismatch",
             "An authentic receipt from a different session. Session binding is what "
@@ -182,7 +182,7 @@ def main() -> None:
         "evidence_hash_mismatch",
     )
     f["evidence"]["terminal_state"] = "rejected"  # after the hash was taken
-    fixtures.append(("21-evidence-hash-mismatch.json", f))
+    fixtures.append(("13-evidence-hash-mismatch.json", f))
 
     # issuer_key_unknown — the one non-failure in this set. Spec section 3.3.1: a
     # receipt whose issuer key is unknown to the verifier is unverified, not invalid.
@@ -204,10 +204,10 @@ def main() -> None:
         "failures": [],
         "warnings": ["issuer_key_unknown"],
     }
-    fixtures.append(("22-receipt-issuer-key-unknown.json", f))
+    fixtures.append(("14-receipt-issuer-key-unknown.json", f))
 
     fixtures.append((
-        "23-receipt-from-future.json",
+        "15-receipt-from-future.json",
         build(
             "receipt-from-future",
             "The receipt is issued after the verification time. A future-dated receipt "
@@ -219,7 +219,7 @@ def main() -> None:
     ))
 
     fixtures.append((
-        "24-decision-not-in-enum.json",
+        "16-decision-not-in-enum.json",
         build(
             "decision-not-in-enum",
             "The controller decision is outside the accepted vocabulary. An unrecognised "
