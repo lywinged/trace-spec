@@ -243,6 +243,18 @@ def _disclosure_not_sealed_by_successor(f: dict[str, Any]) -> bool:
     )
 
 
+def _disclosure_not_yet_sealed(f: dict[str, Any]) -> bool:
+    # At the live tail of the chain — after the crash, before resumption — no
+    # successor exists, so the seal cannot be checked. That is an inability to
+    # check, not a defect (the same section 3.3.1 logic as an unpinned key), so it
+    # is an advisory: the disclosure accuses no one, and confers nothing until the
+    # chain resumes and the seal becomes checkable. Without this rule an unsealed
+    # tail disclosure verified as fully disclosed, while the draft text says a
+    # disclosure not linked from both directions covers nothing — and an adversary
+    # could reach that state at will by truncating the chain after the disclosure.
+    return not f["context"]["chain"]["successor_present"]
+
+
 def _disclosure_contradicted(f: dict[str, Any]) -> bool:
     return bool(f["context"]["chain"]["claimed_absent_but_present"])
 
@@ -293,6 +305,7 @@ RULES: tuple[Rule, ...] = (
         "disclosure",
         _disclosure_not_sealed_by_successor,
     ),
+    Rule("disclosure_not_yet_sealed", "warning", "disclosure", _disclosure_not_yet_sealed),
     Rule("disclosure_contradicted", "failure", "disclosure", _disclosure_contradicted),
 )
 
@@ -342,10 +355,13 @@ def _verify_gap_disclosure(fixture: dict[str, Any], rules: Sequence[Rule]) -> Re
             warnings=warnings,
         )
 
-    if "disclosure_key_unknown" in warnings:
-        # No positive defect, and no verified signature either: the disclosure confers
-        # nothing and proves nothing. It does not count as a properly disclosed gap —
-        # that status requires a signature the verifier actually checked.
+    if "disclosure_key_unknown" in warnings or "disclosure_not_yet_sealed" in warnings:
+        # No positive defect, but something the verifier could not check: a signature
+        # under an unpinned key, or a seal whose successor does not exist yet. The
+        # disclosure confers nothing and proves nothing. It does not count as a
+        # properly disclosed gap — that status requires a signature the verifier
+        # actually checked *and* a splice sealed from both directions. A tail
+        # disclosure upgrades on re-verification once the chain has resumed.
         return ReceiptResult(
             status="gap_disclosure_unverified",
             controller_outcome="unknown",
@@ -485,6 +501,12 @@ def test_fixture_set_is_complete() -> None:
         "proposal-117/14-gap-disclosure-predecessor-link-tail.json",
         "proposal-117/15-gap-disclosure-seal-tail-mismatch.json",
         "proposal-117/16-gap-disclosure-contradicted-at-tail.json",
+        # proposal-117/17-18: disclosure_not_yet_sealed, found by reviewing our own
+        # tree against the draft text — an unsealed tail disclosure verified as fully
+        # disclosed while the draft says half a splice covers nothing. Unverified,
+        # not invalid: absence of a successor is an inability to check (§3.3.1).
+        "proposal-117/17-gap-disclosure-at-unsealed-tail.json",
+        "proposal-117/18-gap-disclosure-tail-with-stale-link.json",
     ]
 
 

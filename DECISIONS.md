@@ -7,6 +7,33 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-08 — An unsealed tail disclosure is unverified, not disclosed
+
+**Recorded by:** Claude (Fable 5)
+**Decision-maker:** Louie Lu
+**Status:** DECIDED and applied
+
+Found while reviewing our own work before replying to the #117 review, and fixed
+before replying rather than shipped alongside the reply. The draft normative text said
+a disclosure not linked from both directions "MUST NOT be treated as covering
+anything"; the reference verifier granted a clean tail disclosure — no successor yet,
+everything else valid — full `receipt_gap_disclosed`, and no fixture pinned either
+reading. Fail-open, and adversarially relevant: a chain truncated immediately after a
+disclosure is indistinguishable from an honest tail, so whatever the verifier granted
+the honest tail it granted the truncation, and the successor seal that the
+replay-refusal argument leans on does not exist at the tail.
+
+Resolution reuses the spec's own §3.3.1 principle a third time (unknown receipt key,
+unknown disclosure key, and now an unborn successor): inability to check is not
+evidence of a defect. New warning rule `disclosure_not_yet_sealed`; a clean tail
+yields `gap_disclosure_unverified` with the advisory — accusing no one, conferring
+nothing, upgrading on re-verification once the chain resumes and the seal exists.
+Two vectors (proposal-117/17, 18) and a declared separating defect (deriving
+sealed-ness from the successor-link field's non-nullness instead of the successor's
+existence), per the margin and independence rules this tree now enforces on itself.
+
+---
+
 ## 2026-08-08 — The #124 and #117 reviews landed; the instrument and the fixtures changed shape under them
 
 **Recorded by:** Claude (Fable 5)

@@ -360,18 +360,58 @@ def main() -> None:
     # disclosure_contradicted, second vector: the contradiction stands at the tail
     # of the chain, where no successor exists yet. A contradiction check gated on
     # the sealed path — natural, since sealing is where cross-examination happens —
-    # never runs here. 04's contradiction sits on the sealed path.
+    # never runs here. 04's contradiction sits on the sealed path. The tail position
+    # additionally carries the disclosure_not_yet_sealed advisory: a failure decides
+    # the outcome, and the advisory still reports what could not be checked.
     out.append(("16-gap-disclosure-contradicted-at-tail.json", fixture(
         "gap-disclosure-contradicted-at-tail",
         "Elements the disclosure implies are absent are present, and the disclosure "
         "sits at the live tail with no successor yet. Self-contradiction impeaches "
         "the emitter wherever it stands.",
         sign(base_disclosure(), KEY),
-        bad("disclosure_contradicted"),
+        {**bad("disclosure_contradicted"), "warnings": ["disclosure_not_yet_sealed"]},
         base_context(
             claimed_absent_but_present=["sha256:" + "c9" * 32],
             successor_present=False,
             successor_previous_receipt_hash=None,
+        ),
+        link_successor=False)))
+
+    # disclosure_not_yet_sealed, both vectors. At the live tail — after the crash,
+    # before resumption — no successor exists and the seal cannot be checked. Spec
+    # section 3.3.1 logic a third time: inability to check is not evidence of a
+    # defect, so the outcome is gap_disclosure_unverified with an advisory, not
+    # receipt_gap_disclosed and not receipt_invalid. Without this rule the verifier
+    # granted full disclosed status to a splice attached at one end — the state the
+    # draft text says covers nothing, and one an adversary reaches at will by
+    # truncating the chain immediately after a disclosure.
+    out.append(("17-gap-disclosure-at-unsealed-tail.json", fixture(
+        "gap-disclosure-at-unsealed-tail",
+        "A well-formed disclosure at the live tail of the chain: signed by the "
+        "chain key, linked to a present predecessor, and with no successor yet to "
+        "seal it. Not invalid — nothing is defective — and not disclosed either: "
+        "half a splice covers nothing until the chain resumes and the seal can be "
+        "checked. Re-verification after resumption upgrades it.",
+        sign(base_disclosure(), KEY),
+        unverified("disclosure_not_yet_sealed"),
+        base_context(successor_present=False, successor_previous_receipt_hash=None),
+        link_successor=False)))
+
+    # Second vector: the successor is absent but the context's successor-link field
+    # carries a stale value. An implementation that derives sealed-ness from "is
+    # there a link value" rather than "is there a successor" reads this as sealed —
+    # the same presence-versus-state confusion as an explicit-null receipt.
+    out.append(("18-gap-disclosure-tail-with-stale-link.json", fixture(
+        "gap-disclosure-tail-with-stale-link",
+        "The same unsealed tail, but the successor-link field in the verification "
+        "context holds a leftover value from a previous verification. There is "
+        "still no successor: sealed-ness is a fact about the chain, not about a "
+        "field being non-null.",
+        sign(base_disclosure(), KEY),
+        unverified("disclosure_not_yet_sealed"),
+        base_context(
+            successor_present=False,
+            successor_previous_receipt_hash="sha256:" + "d7" * 32,
         ),
         link_successor=False)))
 

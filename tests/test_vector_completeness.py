@@ -207,6 +207,15 @@ DEFECTS: dict[str, dict[str, Check]] = {
         and _hash_prefix(f["context"]["chain"]["successor_previous_receipt_hash"])
         != _hash_prefix(_sha256_jcs(f["gap_disclosure"])),
     },
+    # A sealed-ness test read off the wrong field: "is there a successor link value"
+    # instead of "is there a successor". The same family as receipt_missing's
+    # null-vs-absent defect — deriving a state from a field's presence.
+    "disclosure_not_yet_sealed": {
+        "reads_link_field_not_successor": lambda f: f["context"]["chain"][
+            "successor_previous_receipt_hash"
+        ]
+        is None,
+    },
     # A contradiction check reached only on the sealed path, so an unsealed tail
     # disclosure is never cross-examined.
     "disclosure_contradicted": {

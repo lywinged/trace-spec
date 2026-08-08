@@ -1,6 +1,6 @@
 {
-  "name": "gap-disclosure-contradicted-at-tail",
-  "description": "Elements the disclosure implies are absent are present, and the disclosure sits at the live tail with no successor yet. Self-contradiction impeaches the emitter wherever it stands.",
+  "name": "gap-disclosure-at-unsealed-tail",
+  "description": "A well-formed disclosure at the live tail of the chain: signed by the chain key, linked to a present predecessor, and with no successor yet to seal it. Not invalid \u2014 nothing is defective \u2014 and not disclosed either: half a splice covers nothing until the chain resumes and the seal can be checked. Re-verification after resumption upgrades it.",
   "profile": "trace.action_receipt.conformance.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#117",
@@ -22,9 +22,7 @@
       ],
       "successor_previous_receipt_hash": null,
       "successor_present": false,
-      "claimed_absent_but_present": [
-        "sha256:c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9"
-      ],
+      "claimed_absent_but_present": [],
       "consecutive_disclosures": 1
     }
   },
@@ -62,11 +60,9 @@
     "signature": "0WTbD_j2neboOUN8WmkWbVweYp0R-rYWb53LnWWjSomFzAtiZlHDmbKBVbVQ_dlpOj7ZN8cWz6WWzsCwGyCQDQ"
   },
   "expected": {
-    "status": "receipt_invalid",
+    "status": "gap_disclosure_unverified",
     "controller_outcome": "unknown",
-    "failures": [
-      "disclosure_contradicted"
-    ],
+    "failures": [],
     "warnings": [
       "disclosure_not_yet_sealed"
     ],

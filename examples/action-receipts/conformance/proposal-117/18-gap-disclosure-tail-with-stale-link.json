@@ -1,6 +1,6 @@
 {
-  "name": "gap-disclosure-contradicted-at-tail",
-  "description": "Elements the disclosure implies are absent are present, and the disclosure sits at the live tail with no successor yet. Self-contradiction impeaches the emitter wherever it stands.",
+  "name": "gap-disclosure-tail-with-stale-link",
+  "description": "The same unsealed tail, but the successor-link field in the verification context holds a leftover value from a previous verification. There is still no successor: sealed-ness is a fact about the chain, not about a field being non-null.",
   "profile": "trace.action_receipt.conformance.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#117",
@@ -20,11 +20,9 @@
       "permitted_ancestor_key_ids": [
         "did:web:factory.example:safety-controller#ed25519-workload-attestation"
       ],
-      "successor_previous_receipt_hash": null,
+      "successor_previous_receipt_hash": "sha256:d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7",
       "successor_present": false,
-      "claimed_absent_but_present": [
-        "sha256:c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9"
-      ],
+      "claimed_absent_but_present": [],
       "consecutive_disclosures": 1
     }
   },
@@ -62,11 +60,9 @@
     "signature": "0WTbD_j2neboOUN8WmkWbVweYp0R-rYWb53LnWWjSomFzAtiZlHDmbKBVbVQ_dlpOj7ZN8cWz6WWzsCwGyCQDQ"
   },
   "expected": {
-    "status": "receipt_invalid",
+    "status": "gap_disclosure_unverified",
     "controller_outcome": "unknown",
-    "failures": [
-      "disclosure_contradicted"
-    ],
+    "failures": [],
     "warnings": [
       "disclosure_not_yet_sealed"
     ],

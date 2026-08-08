@@ -7,6 +7,7 @@
   "disclosure_issuer_not_chain_key": 2,
   "disclosure_key_unknown": 2,
   "disclosure_not_sealed_by_successor": 2,
+  "disclosure_not_yet_sealed": 3,
   "disclosure_predecessor_absent": 2,
   "disclosure_signature_invalid": 2,
   "disclosure_stream_mismatch": 2,

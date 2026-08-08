@@ -65,6 +65,17 @@ present, and the next chain element emitted after resumption MUST carry a
 directions has not been sealed into the chain and MUST NOT be treated as covering
 anything.
 
+That requirement has a window in which it cannot be met honestly: at the live tail of
+the chain — after the failure, before resumption — the sealing successor does not exist
+yet. A verifier meeting a tail disclosure whose other checks pass MUST NOT report
+`receipt_gap_disclosed`, and MUST NOT report `receipt_invalid` either: the absence of a
+successor is an inability to check, not evidence of a defect (the same principle as
+spec §3.3.1's treatment of unknown keys). It MUST surface the disclosure as unverified
+with a distinct advisory, and re-verification after the chain resumes upgrades or
+impeaches it on the seal that then exists. This matters adversarially: a chain
+truncated immediately after a disclosure is indistinguishable from an honest tail, so
+whatever a verifier grants the honest tail, it grants the truncation.
+
 Gap boundaries MUST NOT be expressed as timestamps or as emitter-assigned sequence
 numbers. Both are signed by the same key that signs the receipts, so neither constrains an
 emitter that is misrepresenting the gap. The chain links are the boundaries.

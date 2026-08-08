@@ -255,3 +255,19 @@ consumes, mutated by named hook, in place of AST recovery. That is implemented i
 `tests/test_action_receipt_fixtures.py` / `tests/test_vector_completeness.py`, with two
 independent vectors per rule enforced under #124's independence definition. Every
 disclosure rule in this note now carries two vectors, 01-16.
+
+**Found while reviewing the above before replying: the unsealed tail was fail-open.**
+The draft text said a disclosure not linked from both directions covers nothing; the
+reference verifier granted a clean tail disclosure (no successor yet, everything else
+valid) full `receipt_gap_disclosed`, and no fixture pinned either reading. The gap
+mattered adversarially — a chain truncated immediately after a disclosure is
+indistinguishable from an honest tail, so the verifier's generosity to the tail was
+generosity to the truncation, and the seal that the replay argument (vector 12) leans
+on simply did not exist there. Resolved by the same §3.3.1 principle used twice
+already: no successor is an *inability to check*, not a defect. New warning rule
+`disclosure_not_yet_sealed`; a clean tail yields `gap_disclosure_unverified` with the
+advisory, accuses no one, confers nothing, and upgrades on re-verification once the
+chain resumes. Vectors 17 (clean tail) and 18 (tail with a stale successor-link value
+in the context — separating implementations that derive sealed-ness from a field's
+non-nullness rather than from the successor's existence), margin three including the
+tail-contradiction vector 16.

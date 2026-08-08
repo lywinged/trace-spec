@@ -194,12 +194,17 @@ to, as distinct from silence.
 | `14-gap-disclosure-predecessor-link-tail.json` | `receipt_invalid` | The predecessor link is wrong only in its final character. |
 | `15-gap-disclosure-seal-tail-mismatch.json` | `receipt_invalid` | The successor's link matches the disclosure's digest in every character but the last. |
 | `16-gap-disclosure-contradicted-at-tail.json` | `receipt_invalid` | The contradiction stands at the live tail, where no successor exists to seal it. |
+| `17-gap-disclosure-at-unsealed-tail.json` | `gap_disclosure_unverified` | A clean disclosure at the live tail: nothing defective, and nothing sealed. Half a splice covers nothing until the chain resumes; unverified, not invalid (§3.3.1), and upgraded on re-verification. |
+| `18-gap-disclosure-tail-with-stale-link.json` | `gap_disclosure_unverified` | The same tail with a stale successor-link value in the context: sealed-ness is a fact about the chain, not about a field being non-null. |
 
 `01`–`08` are one vector per rule; `09`–`16` are the second, independent set (#124),
 including both vectors for `disclosure_stream_mismatch` — the rule the
 [#117 review](https://github.com/agentrust-io/trace-spec/issues/117) asked for: a
 disclosure binds to the receipt stream it excuses, or one honestly signed for stream A
-is a transplantable excuse for a gap in stream B.
+is a transplantable excuse for a gap in stream B. `17`–`18` close a fail-open state
+found by reviewing the tree against the draft text: an unsealed tail disclosure
+verified as fully disclosed, while the draft says half a splice covers nothing — and a
+chain truncated right after a disclosure is indistinguishable from an honest tail.
 `proposal-117/gen_gap_disclosure_vectors.py` regenerates the whole directory
 byte-for-byte.
 
