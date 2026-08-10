@@ -4,6 +4,22 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+TRACE_PROFILE_V0_2 = "tag:agentrust-io.com,2026:trace-v0.2"
+"""EAT profile URI for TRACE v0.2 records.
+
+``TrustRecord.eat_profile`` repeats this as a string literal because PEP 586
+``Literal[...]`` takes literal values, not names. ``tests/test_package.py``
+asserts the two stay equal.
+"""
+
+TRACE_PROFILE_V0_1 = "tag:agentrust.io,2026:trace-v0.1"
+"""Superseded v0.1 profile URI, retained only so a verifier can name what it rejects.
+
+Never add this to a verifier's accepted set: `spec/trace-v0.2.md` requires a v0.2
+verifier to reject it and forbids accepting both. It is invalid under RFC 4151:
+`agentrust.io` was never a domain this project controlled.
+"""
+
 _DIGEST_RE = r"^sha(256:[0-9a-f]{64}|384:[0-9a-f]{96})$"
 # ISO 8601 duration, spelled out by alternation rather than with a negative
 # lookahead so that the same pattern string can be used here and in the JSON
@@ -257,7 +273,7 @@ class ConfirmationKey(BaseModel):
 
 
 class TrustRecord(BaseModel):
-    """TRACE v0.1 Trust Record — hardware-attested governance evidence for an AI agent execution."""
+    """TRACE v0.2 Trust Record — hardware-attested governance evidence for an AI agent execution."""
 
     model_config = ConfigDict(extra="forbid")
 

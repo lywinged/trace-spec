@@ -1,3 +1,26 @@
+> **This is a fork.** Upstream is [`agentrust-io/trace-spec`](https://github.com/agentrust-io/trace-spec).
+> Everything below this note is upstream's README, unchanged.
+>
+> Work offered from here has been merged upstream: rule-coverage vectors
+> ([#122](https://github.com/agentrust-io/trace-spec/pull/122)), profile-cutover enforcement
+> ([#125](https://github.com/agentrust-io/trace-spec/pull/125)), RFC 8785 boundary vectors
+> ([#126](https://github.com/agentrust-io/trace-spec/pull/126)), a schema-copy drift guard
+> ([#136](https://github.com/agentrust-io/trace-spec/pull/136)), an Acta fixture correction
+> ([#137](https://github.com/agentrust-io/trace-spec/pull/137)), and the rule registry with a
+> second independent vector per rule ([#148](https://github.com/agentrust-io/trace-spec/pull/148)).
+>
+> What remains here is held rather than hidden, and it is held because it is an unaccepted
+> proposal rather than because it is unfinished: the `GapDisclosure` design and vectors for
+> [#117](https://github.com/agentrust-io/trace-spec/issues/117), the verifier-compatibility
+> vectors and normative draft for [#116](https://github.com/agentrust-io/trace-spec/issues/116),
+> a crosswalk mapping every RFC 2119 statement in the spec to whom it binds and where it is
+> enforced, and the method write-up behind the coverage work
+> ([10.5281/zenodo.21844893](https://doi.org/10.5281/zenodo.21844893)).
+>
+> **Nothing in this fork is normative TRACE text, and nothing in it is endorsed by upstream.**
+> Anything under `proposals/` is an unaccepted working position; fixtures encoding a proposal
+> carry the issue number and say so.
+
 <p align="center">
   <img src="docs/assets/icon.svg" width="96" height="96" alt="TRACE"/>
 </p>
