@@ -76,6 +76,20 @@ whoever owns the schedule.
 **What travels is the evidence.** Two defects, both already in their tracker, both caused
 by the same missing layer. That is an issue, not a pull request.
 
+**Third piece of evidence, 2026-08-11, and the strongest of the three because it is not a
+defect.** Upstream #157 (`fix(security): bind cnf.jwk to the trusted signing key`, opened
+04:41 UTC) compares `jwk_thumbprint(embedded_jwk)` against `jwk_thumbprint(trusted_jwk)` in
+`sign.py`, ignoring optional JWK metadata. Our #149 (opened 17:51 UTC the previous day) does
+the same comparison in `provenance.py` for the same reason. **Two people, eleven hours
+apart, wrote the same key-identity comparison in two files of one package that already
+exports the helper.** The first two pieces of evidence were things that went wrong; this one
+is work done twice, which is what a missing shared layer costs when nothing is broken.
+
+Offered on #157 as an observation with the refactor explicitly not proposed, since the
+release-cadence cost is the maintainer's to weigh (issuecomment-5249097938). The near-term
+action named there is small: whichever of #149 and #157 merges second should reuse the
+first, and #149 is ours to rebase.
+
 ---
 
 ## 2. The three-step C2PA verification cannot be enforced, because step two returns nothing
