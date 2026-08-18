@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from agentrust_trace import verify_record
+from agentrust_trace.validate import profiles_with_schema
 
 FIXTURE_DIR = Path(__file__).parent.parent / "examples" / "verifier-compatibility"
 PROFILE = "trace.verifier_compatibility.proposal.v0"
@@ -30,6 +31,7 @@ FAILURE_MARKERS = {
     "profile_absent": "no 'eat_profile'",
     "no_accepted_profiles": "accepted_profiles is empty",
     "superseded_profile_in_accepted_set": "superseded v0.1 identifier",
+    "unschemaed_profile_in_accepted_set": "which this build carries no schema for",
     # A record *carrying* the v0.1 identifier is refused with upstream #125's tailored
     # message, distinct from the generic not-in-accepted-set refusal above.
     "superseded_profile_refused": "superseded v0.1 profile",
@@ -49,11 +51,12 @@ def test_vector_set_is_complete() -> None:
         "01-known-version-verified.json",
         "02-unknown-version-refused.json",
         "03-superseded-version-refused.json",
-        "04-downgrade-disclosed.json",
+        "04-unschemaed-profile-refused.json",
         "05-downgrade-silent-is-impossible.json",
         "06-empty-accepted-set-refused.json",
         "07-profile-absent-refused.json",
         "08-dual-accept-configuration-refused.json",
+        "09-unschemaed-profile-first-in-set-refused.json",
     ]
 
 
@@ -114,12 +117,14 @@ def test_every_fixture_signature_is_genuine() -> None:
         fixture = _load(path)
         record = fixture["record"]
         profile = record.get("eat_profile")
-        # Records this library refuses on configuration alone — no profile, or the
-        # superseded v0.1 identifier, which no accepted set may contain — cannot have
-        # their signatures checked through verify_record at all. Every record in this
-        # directory, including those, is re-verified through an independent
-        # cryptographic path by test_fixture_signatures_independent.py.
-        if not profile or profile == V0_1:
+        # Records this library refuses on configuration alone cannot have their
+        # signatures checked through verify_record at all: no profile, the superseded
+        # v0.1 identifier which no accepted set may contain, or a profile this build
+        # carries no schema for and so may not accept. Every record in this directory,
+        # including those, is re-verified through an independent cryptographic path by
+        # test_fixture_signatures_independent.py, which is the stronger check anyway
+        # because it does not run the code under test.
+        if not profile or profile == V0_1 or profile not in profiles_with_schema():
             continue
         # Accept whatever this record carries, so only the signature can fail here.
         verify_record(

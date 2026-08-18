@@ -387,6 +387,21 @@ def verify_record(
             "does not own keep passing as conformant, which is the thing the cutover "
             "exists to end. Remove the v0.1 tag from the set."
         )
+    # A verifier may only accept a profile whose shape it can check. Without this,
+    # widening the set is accepted at configuration time and the record is then
+    # refused by the schema, which reports a structural failure for what is really a
+    # verifier that was configured to claim more than it carries.
+    from agentrust_trace.validate import profiles_with_schema
+
+    unschemaed = [p for p in accepted if p not in profiles_with_schema()]
+    if unschemaed:
+        raise ValueError(
+            f"accepted_profiles names {unschemaed!r}, which this build carries no schema "
+            f"for. It can check {sorted(profiles_with_schema())!r}. Declaring support for "
+            "a profile whose shape cannot be checked is a claim this verifier cannot "
+            "make: a valid signature over semantics this build does not implement is "
+            "not evidence."
+        )
     profile = record.get("eat_profile")
     if not isinstance(profile, str) or not profile:
         raise ValueError(

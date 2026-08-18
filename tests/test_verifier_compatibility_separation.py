@@ -70,13 +70,22 @@ def _separates(vector: dict) -> bool:
     return expected.get("statement") is not None and statement is None
 
 
-# Recorded, not asserted as a threshold. The honest figure is 3 of 8 and a test that
+# Recorded, not asserted as a threshold. The honest figure is 4 of 9 and a test that
 # demanded more would be failing on a truth rather than on a regression. Adding a
 # separating vector fails this and the entry is updated; losing one fails it too.
+#
+# It was 3 of 8. What moved is instructive and is the reason this file exists: the
+# five refusal vectors that separate nothing do so because the schema pins
+# `eat_profile` with a `const`, so their records are refused by the schema whether or
+# not a verifier implements any profile rule at all. The two that were added separate
+# precisely because their records are innocent v0.2 records and the only defect is in
+# the verifier's declared configuration, which no schema can catch. A vector aimed at
+# a configuration rule has to carry a record with nothing wrong with it.
 SEPARATING = frozenset({
-    "01-known-version-verified",          # requires a statement naming the profile
-    "04-downgrade-disclosed",             # a declared older profile must still verify
-    "06-empty-accepted-set-refused",      # the record is valid; only the config is wrong
+    "01-known-version-verified",              # requires a statement naming the profile
+    "04-unschemaed-profile-refused",          # a declared profile with no schema, last
+    "06-empty-accepted-set-refused",          # the record is valid; only the config is wrong
+    "09-unschemaed-profile-first-in-set-refused",  # the same defect, first in the set
 })
 
 

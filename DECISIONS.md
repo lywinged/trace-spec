@@ -7,6 +7,53 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
+## 2026-08-18 — A verifier may only accept a profile it carries a schema for
+
+**Recorded by:** Claude (Opus 5)
+**Status:** DECIDED and applied
+
+**Supersedes** the second half of `2026-08-07 — The v0.1 identifier is refused wherever
+it appears`, which redirected vector 04's downgrade target to a fictional
+`tag:example.com,2025:trace-v0.0` profile. That fixed the conformance problem it was
+aimed at. It did not notice that no record under that profile could ever verify here,
+because `eat_profile` is a `const` in the schema `verify_record` validates against.
+
+`accepted_profiles` could therefore be widened, and nothing could ever be accepted under
+the addition. The parameter could narrow and could not widen, which is not what it
+claimed. Worse, the failure surfaced as a schema error on a record with nothing wrong
+with it, when the defect was in what the verifier had declared about itself.
+
+`verify_record` now refuses an accepted set naming any profile this build carries no
+schema for, alongside the existing refusals of an empty set and of the v0.1 identifier.
+The ceiling is read out of the packaged schema files rather than restated, so it cannot
+drift from what is actually shipped. The sentence already in the code decided this:
+*a valid signature over semantics this build does not implement is not evidence.*
+
+**What this costs, stated rather than discovered later.** A disclosed downgrade is now
+unreachable in this build: the only profiles it carries schemas for are v0.2 and the
+v0.1 identifier, and the cutover forbids accepting v0.1 under any configuration, so
+every permitted accepted set is exactly `(v0.2,)`. The field stays on
+`VerificationStatement` because a build shipping a second acceptable schema would reach
+it, and `test_a_disclosed_downgrade_is_unreachable_in_this_build` fails if that day
+arrives, rather than letting the dead branch sit unnoticed.
+
+**On the vectors.** `04-downgrade-disclosed` became `04-unschemaed-profile-refused`, and
+its record is now an ordinary v0.2 record. That is the substantive change, not the
+rename: a vector aimed at a configuration rule has to carry a record with nothing wrong
+with it, or a verifier that only checks records agrees with it for the wrong reason.
+Vector 04 separated nothing before this and does now. `09-unschemaed-profile-first-in-set-refused`
+was added to give the rule a second vector, with the unusable entry first in the set
+rather than last: a mutation that checks only the head of the set is caught by one of
+the pair and a mutation that checks only the tail by the other, and neither is caught by
+a single vector. The set's measured separating power moves from 3 of 8 to 4 of 9, and
+`tests/test_verifier_compatibility_separation.py` records the new figure.
+
+**Not offered upstream.** This is the `accepted_profiles` machinery of #116, which is a
+proposal under review and not accepted normative text. What is reportable there is the
+measurement, and that was already posted on 2026-08-13.
+
+---
+
 ## 2026-08-10 — The fork was rebuilt on upstream rather than rebased onto it
 
 **Recorded by:** Claude (Opus 5)

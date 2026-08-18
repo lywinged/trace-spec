@@ -163,24 +163,29 @@ def main() -> None:
             ),
         ),
         (
-            "04-downgrade-disclosed.json",
+            "04-unschemaed-profile-refused.json",
             fixture(
-                "downgrade-disclosed",
-                "The verifier declares support for an older profile as well, and the "
-                "record uses it. Conformant, because the fallback is visible: the "
-                "statement carries the full accepted set and marks the run as "
-                "downgraded. The older profile is deliberately not the v0.1 "
-                "identifier, which no accepted set may contain (see vector 08).",
-                record_profile=OLDER,
+                "unschemaed-profile-refused",
+                "The verifier declares support for an older profile it carries no "
+                "schema for, and the record uses it. Refused at configuration, not at "
+                "the record: a verifier can only honestly accept a profile whose shape "
+                "it can check, and declaring more than that is a claim it cannot make. "
+                "The record is an ordinary v0.2 record and nothing about it is wrong, "
+                "which is the point: the only defect is in what the verifier declared, "
+                "so a verifier that checks the record and not its own configuration "
+                "accepts this and is still non-conformant. This vector said 'verified, "
+                "downgraded' over an older record until the set was measured against a "
+                "null verifier: that record was reaching the schema and being refused "
+                "there, so the vector separated the schema rule rather than the profile "
+                "rule it named. The older profile is deliberately not the v0.1 "
+                "identifier, which no accepted set may contain for a different reason "
+                "(see vector 08).",
+                record_profile=V0_2,
                 accepted_profiles=[V0_2, OLDER],
                 expected={
-                    "outcome": "verified",
-                    "failure": None,
-                    "statement": {
-                        "profile": OLDER,
-                        "accepted_profiles": [V0_2, OLDER],
-                        "downgraded": True,
-                    },
+                    "outcome": "refused",
+                    "failure": "unschemaed_profile_in_accepted_set",
+                    "statement": None,
                 },
             ),
         ),
@@ -197,6 +202,25 @@ def main() -> None:
                 expected={
                     "outcome": "refused",
                     "failure": "profile_not_accepted",
+                    "statement": None,
+                },
+            ),
+        ),
+        (
+            "09-unschemaed-profile-first-in-set-refused.json",
+            fixture(
+                "unschemaed-profile-first-in-set-refused",
+                "The same defect as vector 04 with the unusable profile first in the "
+                "declared set instead of last. Every declared profile has to be "
+                "checked, not one of them: an implementation that reads the head of "
+                "the set, or the tail, agrees with one of these two vectors and not "
+                "the other. The record is again an ordinary v0.2 record, so the only "
+                "difference between the pair is where the unusable entry sits.",
+                record_profile=V0_2,
+                accepted_profiles=[OLDER, V0_2],
+                expected={
+                    "outcome": "refused",
+                    "failure": "unschemaed_profile_in_accepted_set",
                     "statement": None,
                 },
             ),

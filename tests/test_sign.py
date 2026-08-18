@@ -745,18 +745,49 @@ def test_vector_known_version_verifies_and_echoes_the_profile():
     assert statement.key_source == "trusted"
 
 
-def test_vector_downgrade_is_conformant_only_when_disclosed():
-    """Vector 3: widening the accepted set is a declared downgrade, and it shows."""
+def test_vector_widening_to_an_unschemaed_profile_is_refused():
+    """Vector 3: a verifier may only accept a profile whose shape it can check.
+
+    This asserted the opposite until the set was measured: widening was treated as a
+    disclosed downgrade and expected to verify. It never did. The record was refused
+    a few lines later by the schema, whose ``eat_profile`` is a ``const``, so the
+    declared set could be widened but no record could ever be verified under the
+    addition. Refusing the configuration says that at the point the claim is made,
+    rather than reporting a structural failure for a record that has nothing wrong
+    with it.
+    """
     older = "tag:example.com,2025:trace-v0.0"
-    record, jwk = _record_with_profile(older)
+    record, jwk = _record_with_profile(TRACE_PROFILE_V0_2)
 
-    statement = verify_record(record, jwk, accepted_profiles=(TRACE_PROFILE_V0_2, older))
+    with pytest.raises(ValueError, match="carries no schema for"):
+        verify_record(record, jwk, accepted_profiles=(TRACE_PROFILE_V0_2, older))
 
-    # The statement discloses both what it verified under and the full set the
-    # verifier declared, so a reader can see the fallback rather than infer it.
-    assert statement.profile == older
-    assert statement.accepted_profiles == (TRACE_PROFILE_V0_2, older)
     assert older not in DEFAULT_ACCEPTED_PROFILES
+
+
+def test_a_disclosed_downgrade_is_unreachable_in_this_build():
+    """The consequence of the rule above, pinned rather than left to be rediscovered.
+
+    ``VerificationStatement`` can express a run under a profile other than the newest
+    the verifier declared. This build cannot produce one: the only profiles it carries
+    a schema for are v0.2 and the v0.1 identifier, and the cutover forbids accepting
+    v0.1 under any configuration. So every accepted set this build permits is exactly
+    ``(v0.2,)``, and a statement's profile is always its first element.
+
+    That is a property of a single-schema build, not of the design. A build shipping a
+    second acceptable schema would reach it, which is why the field stays.
+    """
+    from agentrust_trace.validate import profiles_with_schema
+
+    permitted = profiles_with_schema() - {TRACE_PROFILE_V0_1}
+    assert permitted == {TRACE_PROFILE_V0_2}, (
+        "a second acceptable schema is now shipped, so a disclosed downgrade is "
+        "reachable and this test should be replaced by one that exercises it"
+    )
+
+    record, jwk = _record_with_profile(TRACE_PROFILE_V0_2)
+    statement = verify_record(record, jwk, accepted_profiles=(TRACE_PROFILE_V0_2,))
+    assert statement.profile == statement.accepted_profiles[0]
 
 
 def test_vector_silent_downgrade_has_no_code_path():
