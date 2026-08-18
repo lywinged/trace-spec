@@ -71,6 +71,11 @@ def build_provenance_depth() -> list[Vector]:
                  lambda e: deepest(e)["outcome"], codes, separates_at)
 
 
+def verifier_compatibility() -> list[Vector]:
+    return _load("verifier-compatibility",
+                 lambda e: e["outcome"], lambda e: [e.get("failure")])
+
+
 def canonicalization_boundary() -> list[Vector]:
     return _load("canonicalization-boundary",
                  lambda e: e["outcome"], lambda e: [e.get("failure")])
@@ -118,6 +123,7 @@ SETS = {
     "build-provenance-depth": (build_provenance_depth, _depth_boundary),
     "canonicalization-boundary": (canonicalization_boundary, None),
     "delegation-link": (delegation_link, None),
+    "verifier-compatibility": (verifier_compatibility, None),
 }
 
 # Every set must be able to fail both unconditional implementations. A set that

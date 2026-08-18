@@ -153,7 +153,11 @@ def main() -> None:
                 accepted_profiles=[V0_2],
                 expected={
                     "outcome": "refused",
-                    "failure": "profile_not_accepted",
+                    # `verify_record` takes a dedicated branch for the v0.1 identifier
+                    # and raises the tailored message, so this vector separates that
+                    # rule and not the generic one. The committed fixture has said so
+                    # since the tailored branch landed; the generator had not.
+                    "failure": "superseded_profile_refused",
                     "statement": None,
                 },
             ),
