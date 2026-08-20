@@ -60,14 +60,45 @@ U+1F600 and `zk` followed by U+FFFD — U+1F600 is `D83D DE00` in UTF-16, so it 
 `iat` is fixed so the set regenerates byte-for-byte; run with freshness disabled or
 with `iat`'s instant supplied as "now". `gen_boundary_vectors.py` regenerates the set.
 
-## What there is deliberately no vector for
+## The number domain, which this set does not yet cover
 
-RFC 8785's IEEE 754 number serialization (the other divergence the spec warns about)
-is **unreachable in a schema-valid v0.2 record**: no field in `schema/trace-claim.json`
-is typed `number`, and integers up to 2^53 serialize identically everywhere. The test
-suite pins this with `test_number_divergence_is_still_unreachable`, which fails the day
-a numeric field enters the schema — at which point the correct response is a
-number-formatting vector here, not an edit to the test.
+An earlier version of this section claimed RFC 8785's IEEE 754 number serialization was
+unreachable in a schema-valid v0.2 record, on the grounds that no field in
+`schema/trace-claim.json` is typed `number` and that integers up to 2^53 serialize
+identically everywhere. The first half holds. The second half does not carry the claim,
+because nothing bounds those integers at 2^53.
+
+`schema/trace-claim.json` declares five integer fields, and only
+`build_provenance.slsa_level` has a `maximum`. `iat`, `tool_use.call_count`,
+`source.ingested_at` and `appraisal.timestamp` are unbounded above, so
+`"call_count": 9007199254740993` is a schema-valid record — and RFC 8785 section 3.2.2.3
+admits only numbers representable as IEEE 754 doubles, which that value is not.
+
+Measured against three implementations:
+
+| Value | `rfc8785.dumps` | `json.dumps` (CPython) | `JSON.stringify` (Node) |
+|---|---|---|---|
+| 9007199254740991 (2^53 − 1) | `9007199254740991` | `9007199254740991` | `9007199254740991` |
+| 9007199254740992 (2^53) | raises `IntegerDomainError` | `9007199254740992` | `9007199254740992` |
+| 9007199254740993 (2^53 + 1) | raises `IntegerDomainError` | `9007199254740993` | `9007199254740992` |
+| 12345678901234567890 | raises `IntegerDomainError` | `12345678901234567890` | `12345678901234567000` |
+
+2^53 + 1 is the sharp value: the three disagree three ways — refuse, serialize exactly,
+serialize a different number. The third is silent, and it is the one that matters across
+implementations, because a JavaScript verifier has lost the value at parse time and has
+nothing left to detect it with.
+
+The fixture owed here does not fit the shape of `01`–`04`. Those carry
+`expected.outcome: verified` and a signature over their RFC 8785 bytes; for this case
+there are no RFC 8785 bytes to sign. It is a negative vector: a schema-valid record that
+a conformant implementation must refuse to canonicalize, and that an ad-hoc implementation
+serializes without complaint.
+
+`test_number_divergence_is_still_unreachable` in `tests/test_canonicalization_boundary.py`
+asserts only that no field is typed `number`. It does not look at integer bounds, so it
+passes today and would have passed on the day the claim above stopped holding. It is left
+as it stands pending a decision between bounding these fields in the schema and adding the
+vector.
 
 These vectors exercise accepted normative text (the section 3.2.2 MUST), not a
 proposal; they carry no proposal marker.
