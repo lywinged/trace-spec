@@ -54,7 +54,7 @@ Binds the governance policy in force during this session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `bundle_hash` | string | **yes** | `sha256:` digest of the Cedar policy bundle bytes |
-| `enforcement_mode` | string | **yes** | `enforce` or `silent` (advisory) |
+| `enforcement_mode` | string | **yes** | One of: `enforce`, `advisory`, `silent`, `declared`. `declared` names a policy that nothing evaluated, and a consumer must not read it as evidence that any rule was checked |
 | `version` | string | no | Policy bundle version string |
 | `policy_uri` | string | no | URI to the policy bundle for inspection |
 
