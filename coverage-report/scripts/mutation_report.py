@@ -46,9 +46,24 @@ TRACE_SPEC = Path(
 )
 VERIFIER = TRACE_SPEC / "tests" / "test_action_receipt_fixtures.py"
 FIXTURE_DIR = TRACE_SPEC / "examples" / "action-receipts" / "conformance"
-FIXTURES = sorted(FIXTURE_DIR.glob("*.json"))
 
 sys.path.insert(0, str(TRACE_SPEC / "tests"))
+
+# Discovery comes from the verifier module rather than being restated here. A flat
+# `glob("*.json")` stood here and saw thirty of forty-eight vectors: everything one
+# directory down, in `conformance/proposal-117/`, was invisible. That is not a
+# miscount, it changes the answers. `receipt_gap_disclosed` is held by exactly two
+# vectors and both are down there, so this script reported the obligation as held by
+# nothing and exited non-zero, and `pair_mutation` and `triple_mutation` — which
+# import FIXTURES from here — reported "no rule is masked" and "nothing new at rank
+# three" over a corpus missing a fifth of itself, exiting zero while doing it.
+#
+# It is the defect of agentrust-io/trace-spec#208, which upstream closed for its two
+# readers with a shared `discover_fixtures`. Importing that same function is what
+# stops a third reader from drifting away from them again.
+from test_action_receipt_fixtures import discover_fixtures  # noqa: E402
+
+FIXTURES = discover_fixtures(FIXTURE_DIR)
 
 # Rules a vector set may leave unmutated, each with the reason. Consulted by *every*
 # criterion here — the audited implementation consults its equivalent for named coverage
