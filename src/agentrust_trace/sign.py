@@ -14,7 +14,8 @@ import hashlib
 import json
 import os
 import warnings
-from collections.abc import Callable, Container
+from collections.abc import Callable, Container, Sequence
+from dataclasses import dataclass
 from typing import Any, TypeAlias
 
 import rfc8785
@@ -22,15 +23,53 @@ from jsonschema import ValidationError
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-TRACE_PROFILE_V0_2 = "tag:agentrust-io.com,2026:trace-v0.2"
-"""The profile URI this build implements — the only one ``verify_record`` accepts."""
+from agentrust_trace.models import TRACE_PROFILE_V0_1, TRACE_PROFILE_V0_2
 
-_TRACE_PROFILE_V0_1 = "tag:agentrust.io,2026:trace-v0.1"
-"""The superseded identifier, minted under a domain the project does not own.
+DEFAULT_ACCEPTED_PROFILES: tuple[str, ...] = (TRACE_PROFILE_V0_2,)
+"""Profile URIs ``verify_record`` accepts unless the caller declares another set.
 
-Named only so its rejection can say why. Deliberately not exported: no caller
-should be able to spell it without reading this file.
+`spec/trace-v0.2.md` ("Changes from v0.1") requires a v0.2 verifier to accept
+``tag:agentrust-io.com,2026:trace-v0.2``, to reject the v0.1 identifier, and not to
+accept both. This default is that rule.
 """
+
+
+@dataclass(frozen=True)
+class VerificationStatement:
+    """What a successful ``verify_record`` call actually established.
+
+    Returned so a relying party can record *which semantics the record was verified
+    under* and *which checks ran*, rather than reducing verification to a boolean.
+    Evidence outlives verifier builds: a statement that does not name its profile
+    cannot be re-read years later, and one that does not name its coverage invites
+    the reader to assume checks that never ran.
+
+    ``revocation_checked`` is the honest form of a limitation already documented in
+    ``LIMITATIONS.md``: when it is ``False``, the statement means "validly signed by
+    this key", not "this key is still trusted".
+    """
+
+    profile: str
+    """The ``eat_profile`` the record was verified under. Always a member of
+    ``accepted_profiles``, and covered by the verified signature."""
+
+    accepted_profiles: tuple[str, ...]
+    """The full set the verifier declared it supports for this call."""
+
+    key_source: str
+    """``"trusted"`` for a caller-supplied key, ``"embedded"`` for ``cnf.jwk`` under
+    ``allow_embedded_key=True`` — which proves internal consistency, not authenticity."""
+
+    freshness_checked: bool
+    """Whether ``iat`` was bounded by ``max_age_seconds``."""
+
+    nonce_checked: bool
+    """Whether ``runtime.nonce`` was compared against a caller-supplied nonce."""
+
+    revocation_checked: bool
+    """Whether a revocation store was consulted. ``False`` means non-revocation is
+    unproven, not disproven."""
+
 
 RevocationStore: TypeAlias = Container[str] | Callable[[str], bool]
 """Caller-supplied source of key revocation status, consulted by ``verify_record``.
@@ -328,31 +367,33 @@ def verify_record(
     max_future_skew_seconds: int = 300,
     expected_nonce: str | None = None,
     revocation: RevocationStore | None = None,
-) -> None:
+    accepted_profiles: Sequence[str] = DEFAULT_ACCEPTED_PROFILES,
+) -> VerificationStatement:
     """Verify an Ed25519 signature on a signed TRACE Trust Record.
 
     A trusted key is REQUIRED. Pass an ``Ed25519PublicKey`` or a JWK dict via
     *public_key_or_jwk* to verify against a key the caller already trusts.
 
     Raises ``InvalidSignature`` if the signature does not verify, and ``ValueError``
-    for every other rejection (wrong or missing profile, no signature, no trusted
-    key, malformed input, unsupported JWK type, stale record, nonce mismatch, or
-    revoked key). Returns ``None`` on success. All checks fail closed.
+    for every other rejection (no signature, unsupported profile, no trusted key,
+    malformed input, unsupported JWK type, stale record, nonce mismatch, or revoked
+    key). Returns a :class:`VerificationStatement` on success. All checks fail closed.
 
     Profile (fail closed):
-        The record's ``eat_profile`` must be exactly ``TRACE_PROFILE_V0_2``.
-        ``spec/trace-v0.2.md`` section 2 requires this of a v0.2 verifier: require
-        the v0.2 identifier, reject the superseded v0.1 identifier, and never accept
-        both. Any other profile is refused rather than verified on a best-effort
-        basis, because "the signature checks out" says nothing about whether this
-        code implements the semantics the record was written under. A missing
-        profile is refused for the same reason: a verifier cannot supply it by
-        assumption.
+        ``accepted_profiles`` is the set of ``eat_profile`` URIs this verifier claims
+        to implement; it defaults to TRACE v0.2 alone. A record carrying any other
+        profile is refused rather than verified on a best-effort basis, because
+        "the signature checks out" says nothing about whether this code implements
+        the semantics the record was written under. `spec/trace-v0.2.md` requires
+        exactly this of a v0.2 verifier, and forbids accepting the v0.1 identifier
+        alongside it — passing a set containing ``TRACE_PROFILE_V0_1`` raises
+        ``ValueError`` before any record is examined, so the dual-accepting verifier
+        the cutover forbids cannot be configured here at all. Declared downgrade to
+        other, legitimately owned older profiles remains representable.
 
-        The profile is read before any cryptographic work, which is safe because
-        the only action taken on the unauthenticated value is refusal; a record
-        that verifies has had its profile covered by the signature, since the
-        signature spans the whole record.
+        The profile is read before the signature is checked, so the refusal is cheap;
+        a record that returns successfully has had its profile covered by the verified
+        signature, since the signature spans the whole record.
 
     Trust anchoring (fail closed):
         Without a trusted key, the record cannot vouch for itself, so verification
@@ -387,16 +428,48 @@ def verify_record(
 
     from cryptography.exceptions import InvalidSignature as _InvalidSignature  # noqa: F401
 
-    # Profile first: refuse semantics this build does not implement before spending
-    # any work on the record.
+    # Profile first: refuse semantics this build does not implement, before spending
+    # any work on the record. Reading it pre-signature is safe because the only action
+    # taken on an unauthenticated value here is refusal.
+    accepted = tuple(accepted_profiles)
+    if not accepted:
+        raise ValueError(
+            "accepted_profiles is empty: a verifier that declares no supported profile "
+            "can verify nothing. Pass DEFAULT_ACCEPTED_PROFILES or an explicit set."
+        )
+    if TRACE_PROFILE_V0_1 in accepted:
+        raise ValueError(
+            f"accepted_profiles contains the superseded v0.1 identifier "
+            f"{TRACE_PROFILE_V0_1!r}. The v0.2 cutover is cutover, not coexistence: a "
+            "dual-accepting verifier lets records minted under a domain the project "
+            "does not own keep passing as conformant, which is the thing the cutover "
+            "exists to end. Remove the v0.1 tag from the set."
+        )
+    # A verifier may only accept a profile whose shape it can check. Without this,
+    # widening the set is accepted at configuration time and the record is then
+    # refused by the schema, which reports a structural failure for what is really a
+    # verifier that was configured to claim more than it carries.
+    from agentrust_trace.validate import profiles_with_schema
+
+    unschemaed = [p for p in accepted if p not in profiles_with_schema()]
+    if unschemaed:
+        raise ValueError(
+            f"accepted_profiles names {unschemaed!r}, which this build carries no schema "
+            f"for. It can check {sorted(profiles_with_schema())!r}. Declaring support for "
+            "a profile whose shape cannot be checked is a claim this verifier cannot "
+            "make: a valid signature over semantics this build does not implement is "
+            "not evidence."
+        )
     profile = record.get("eat_profile")
     if not isinstance(profile, str) or not profile:
         raise ValueError(
             "record has no 'eat_profile': the profile URI states which semantics the "
             "record was written under, and a verifier cannot supply it by assumption"
         )
-    if profile != TRACE_PROFILE_V0_2:
-        if profile == _TRACE_PROFILE_V0_1:
+    if profile not in accepted:
+        if profile == TRACE_PROFILE_V0_1:
+            # Upstream's #125 names this case specifically, and the tailored message
+            # is worth keeping: the generic refusal would be true but less useful.
             raise ValueError(
                 f"record carries the superseded v0.1 profile {profile!r}. "
                 "spec/trace-v0.2.md section 2: the cutover is cutover, not "
@@ -404,9 +477,9 @@ def verify_record(
                 "was minted under a domain the project does not own."
             )
         raise ValueError(
-            f"record profile {profile!r} is not {TRACE_PROFILE_V0_2!r}. Verification "
-            "is refused rather than attempted: a valid signature over semantics this "
-            "build does not implement is not evidence."
+            f"record profile {profile!r} is not in this verifier's accepted set "
+            f"{list(accepted)}. Verification is refused rather than attempted: a valid "
+            "signature over semantics this build does not implement is not evidence."
         )
 
     sig_b64 = record.get("signature")
@@ -432,7 +505,9 @@ def verify_record(
 
     # Resolve the trusted public key. A trusted key is required: a record cannot
     # authenticate itself with the key it embeds.
+    key_source = "trusted"
     if public_key_or_jwk is None:
+        key_source = "embedded"
         if not allow_embedded_key:
             raise ValueError(
                 "verify_record requires a trusted key. Pass an Ed25519PublicKey or "
@@ -515,3 +590,12 @@ def verify_record(
     msg = _canonical_bytes(record_no_sig)
 
     pub.verify(sig_bytes, msg)  # raises InvalidSignature on failure
+
+    return VerificationStatement(
+        profile=profile,
+        accepted_profiles=accepted,
+        key_source=key_source,
+        freshness_checked=max_age_seconds is not None,
+        nonce_checked=expected_nonce is not None,
+        revocation_checked=revocation is not None,
+    )

@@ -1,46 +1,44 @@
-"""Completeness checks over the action-receipt conformance vectors.
+"""Completeness checks over the conformance vector sets.
 
-`test_action_receipt_fixtures.py` asks whether the vectors are *correct*. This module
-asks whether they are *complete*: does every obligation the verifier implements have
-vectors that notice when the obligation is gone — and notice it from more than one
-direction?
+The other modules ask whether the vectors are *correct*. This one asks whether they are
+*complete*: does every obligation the verifier implements have vectors that notice when
+the obligation is gone — and notice it from more than one direction?
 
-The rule inventory is ``RULES``, the registry the verifier itself consumes. A
-hand-maintained rule list drifts when someone forgets to extend it; an inventory
-recovered from the verifier's source by AST search has the mirror failure — a rule
-written as ``extend([...])``, ``+=``, an f-string or a named constant is invisible to
-the walk, and the suite reports complete coverage over an inventory that is quietly
-missing entries (#124). The registry inverts that: a check that is not registered
-never runs, so it cannot silently exist outside the inventory, and
-``test_no_emission_outside_the_registry`` is the residual guard for code that would
-try to emit around it.
+The rule inventory is ``RULES``, the registry the verifier itself consumes. An earlier
+revision recovered the inventory from the verifier's source with ``ast``, and upstream
+#124's review identified the failure mode this creates: a rule written as
+``failures.extend([...])``, ``+=``, an f-string or a named constant is invisible to the
+walk, and the suite reports complete coverage over an inventory that is quietly missing
+entries. The registry inverts that. A check that is not registered never runs, so it
+cannot silently exist outside the inventory; and ``test_no_emission_outside_the_registry``
+is the residual guard for code that would try to emit around the registry.
 
 Mutation therefore targets **named rule hooks**: a rule is deleted by rebuilding the
-registry without its entry, or weakened by substituting its check — never by
-pattern-matching source text — so the mutation cannot drift away from the code under
-test.
+registry without its entry, or weakened by substituting its check — never by pattern-
+matching source text. Same review, same reason: mutate what the verifier actually
+consumes, so the mutation cannot drift away from the code under test.
 
 The questions, in increasing strength:
 
 1. Does any fixture expect a code the registry cannot produce? (dead expectations)
 2. Is every registered rule exercised by some fixture? (unexercised rules)
-3. Does deleting each rule change at least **two** fixtures' outcomes? (#124:
-   single-vector coverage has no margin — one fixture weakened or renamed away
-   silently removes a rule's coverage)
+3. Does deleting each rule change at least **two** fixtures' outcomes? (#124: single-
+   vector coverage has no margin — one fixture weakened or renamed away silently
+   removes a rule's coverage)
 4. Are two of those fixtures **independent** — is there a single plausible
-   implementation defect that one catches and the other misses? Two copies of the
-   same vector satisfy question 3 and fail this one.
+   implementation defect that one catches and the other misses? Two copies of the same
+   vector satisfy question 3 and fail this one.
 5. Has any rule's margin dropped below what it was? (silent thinning)
 
-Independence is #124's definition made executable. For every rule, ``DEFECTS``
-declares at least one *weakened* variant of its check, each modelling a real
-implementation shortcut: comparing digest prefixes, case-insensitive identifier
-matching, structural signature validation without cryptography, clock-skew
-tolerances. A rule's vectors are independent when some declared defect deviates at
-least one of them from its expected outcome while leaving another undisturbed. The
-declaration is fail-closed: a registered rule with no defect entry fails the suite,
-so the question "what bug would your second vector catch that your first would not?"
-has to be answered when the rule is added, not after a regression demonstrates it.
+Independence is #124's definition made executable. For every rule, ``DEFECTS`` declares
+at least one *weakened* variant of its check, each modelling a real implementation
+shortcut: comparing digest prefixes, case-insensitive identifier matching, structural
+signature validation without cryptography, clock-skew tolerances. A rule's vectors are
+independent when some declared defect deviates at least one of them from its expected
+outcome while leaving another undisturbed. The declaration is fail-closed: a registered
+rule with no defect entry fails the suite, so the question "what bug would your second
+vector catch that your first would not?" has to be answered when the rule is added,
+not after a regression demonstrates it.
 """
 
 from __future__ import annotations
@@ -176,6 +174,57 @@ DEFECTS: dict[str, dict[str, Check]] = {
         == "gateway_self_report"
         and f["receipt"]["decision"] == "accepted",
     },
+    # -- disclosure rules ---------------------------------------------------
+    "disclosure_key_unknown": {
+        "looks_up_keys_case_insensitively": lambda f: _ci_lookup(f, f["gap_disclosure"])
+        is None,
+    },
+    "disclosure_signature_invalid": {
+        "checks_structure_only": lambda f: _trusted_jwk(f, f["gap_disclosure"]) is not None
+        and _sig_malformed(f["gap_disclosure"]),
+    },
+    "disclosure_issuer_not_chain_key": {
+        "matches_keys_case_insensitively": lambda f: f["gap_disclosure"][
+            "issuer_key_id"
+        ].lower()
+        not in {
+            f["context"]["chain"]["predecessor_issuer_key_id"].lower(),
+            *(k.lower() for k in f["context"]["chain"]["permitted_ancestor_key_ids"]),
+        },
+    },
+    "disclosure_stream_mismatch": {
+        "compares_case_insensitively": lambda f: f["gap_disclosure"]["session_id"].lower()
+        != f["context"]["session_id"].lower(),
+    },
+    "disclosure_predecessor_absent": {
+        "compares_truncated_link": lambda f: _hash_prefix(
+            f["gap_disclosure"]["previous_receipt_hash"]
+        )
+        != _hash_prefix(f["context"]["chain"]["predecessor_hash"])
+        or not f["context"]["chain"]["predecessor_present"],
+    },
+    "disclosure_not_sealed_by_successor": {
+        "compares_truncated_link": lambda f: f["context"]["chain"]["successor_present"]
+        and _hash_prefix(f["context"]["chain"]["successor_previous_receipt_hash"])
+        != _hash_prefix(_sha256_jcs(f["gap_disclosure"])),
+    },
+    # A sealed-ness test read off the wrong field: "is there a successor link value"
+    # instead of "is there a successor". The same family as receipt_missing's
+    # null-vs-absent defect — deriving a state from a field's presence.
+    "disclosure_not_yet_sealed": {
+        "reads_link_field_not_successor": lambda f: f["context"]["chain"][
+            "successor_previous_receipt_hash"
+        ]
+        is None,
+    },
+    # A contradiction check reached only on the sealed path, so an unsealed tail
+    # disclosure is never cross-examined.
+    "disclosure_contradicted": {
+        "checks_only_when_sealed": lambda f: bool(
+            f["context"]["chain"]["claimed_absent_but_present"]
+        )
+        and f["context"]["chain"]["successor_present"],
+    },
 }
 
 
@@ -250,10 +299,10 @@ def _margin(code: str) -> set[str]:
 def test_registry_is_well_formed() -> None:
     """Vacuity and hygiene: the inventory below is only as good as the registry."""
     assert FIXTURES, "no fixtures found"
-    assert len(RULES) >= 13, "the registry lost most of its entries"
+    assert len(RULES) >= 20, "the registry lost most of its entries"
     assert len(set(RULE_CODES)) == len(RULE_CODES), "duplicate rule codes in the registry"
     assert all(rule.severity in {"failure", "warning"} for rule in RULES)
-    assert all(rule.path in {"receipt", "missing"} for rule in RULES)
+    assert all(rule.path in {"receipt", "disclosure", "missing"} for rule in RULES)
 
 
 def test_no_emission_outside_the_registry() -> None:
@@ -262,7 +311,10 @@ def test_no_emission_outside_the_registry() -> None:
     The registry is the inventory *because* `_evaluate` is the only place a code is
     emitted. This walks the verifier's source and fails on: an append to a failure or
     warning collection anywhere else, or a literal code smuggled into a result's
-    `failures=`/`warnings=` argument.
+    `failures=`/`warnings=` argument. One literal is allowed by name —
+    `receipt_gap_disclosed`, the advisory that echoes the status on the valid
+    disclosure path; it states an outcome rather than enforcing an obligation, which
+    is why it is not a rule.
     """
     tree = ast.parse(VERIFIER_MODULE.read_text(encoding="utf-8"))
 
@@ -289,7 +341,11 @@ def test_no_emission_outside_the_registry() -> None:
         if isinstance(node, ast.keyword) and node.arg in {"failures", "warnings"}:
             if isinstance(node.value, ast.List):
                 for element in node.value.elts:
-                    if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                    if (
+                        isinstance(element, ast.Constant)
+                        and isinstance(element.value, str)
+                        and element.value != "receipt_gap_disclosed"
+                    ):
                         findings.append(
                             f"line {element.lineno}: literal {element.value!r} in a "
                             f"{node.arg}= argument bypasses the registry"
@@ -339,7 +395,7 @@ def _codes_expected_by_fixtures() -> set[str]:
 
 def test_no_fixture_expects_a_code_the_registry_cannot_emit() -> None:
     """A fixture naming a code nothing produces holds an assertion that cannot fail."""
-    orphans = _codes_expected_by_fixtures() - set(RULE_CODES)
+    orphans = _codes_expected_by_fixtures() - set(RULE_CODES) - {"receipt_gap_disclosed"}
     assert not orphans, (
         f"fixtures expect codes no registered rule produces: {sorted(orphans)}. "
         "Either the rule was removed and the fixture kept, or the code is misspelled — "

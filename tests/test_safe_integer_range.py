@@ -18,6 +18,7 @@ whole argument on the standard library alone, and one of the tests below runs it
 
 from __future__ import annotations
 
+import importlib.resources
 import json
 import re
 import subprocess
@@ -125,32 +126,46 @@ def test_every_schema_in_the_repository_is_classified() -> None:
     assert _schemas_on_disk() == set(BOUNDED_SCHEMAS) | set(UNBOUNDED_SCHEMAS)
 
 
-def test_the_superseded_schema_is_still_loaded_by_nothing() -> None:
-    """The exemption rests on a fact, so the fact is checked.
+def test_no_record_is_ever_validated_against_the_superseded_schema() -> None:
+    """The exemption rests on a fact, so the fact is checked -- and on the fact
+    itself, not on a proxy for it.
 
     `schema/pic-trace-bridge-v1.json` was exempted here on the reasoning that it
-    declared no canonicalization, which was read off the schema file. The code
-    that signs a bridge artifact calls the same `_canonical_bytes` as everything
-    else, so the exemption was wrong and hid the identical defect. The lesson is
-    that an exemption reason nobody measures is how a defect stays exempt.
+    declared no canonicalization, read off the schema file. The code that signs a
+    bridge artifact calls the same `_canonical_bytes` as everything else, so the
+    exemption was wrong and hid the identical defect. An exemption reason nobody
+    measures is how a defect stays exempt.
 
-    The reason left is that nothing loads the v0.1 schema. That is checkable, and
-    the exclusion below is written as `Path(__file__).name` rather than as a
-    literal: the first version named the file it lived in, and renaming that file
-    made this test find its own mention and fail.
+    The reason left for v0.1 is that no record is ever validated against it. The
+    first version of this test checked that by grepping source files for the
+    filename, which is a proxy and not the property: a build carrying the
+    accepted-profile machinery reads every schema in the directory to learn which
+    identifiers exist, so it names `trace-v0.1.json` while still never validating
+    anything against it, and the proxy failed while the property held. This checks
+    the property.
     """
-    referenced = [
-        str(path.relative_to(REPO_ROOT))
-        for path in sorted(REPO_ROOT.rglob("*.py"))
-        if ".venv" not in path.parts
-        and path.name != Path(__file__).name  # this file names it to exempt it
-        and "trace-v0.1.json" in path.read_text(encoding="utf-8")
-    ]
-    assert not referenced, (
-        f"trace-v0.1.json is now referenced by {referenced}, so it is no longer "
-        "exempt on the grounds that nothing loads it. Bound it or record a reason "
-        "that is true."
+    packaged = importlib.resources.files("agentrust_trace") / "schema"
+    validator_schema = json.loads(
+        (packaged / "trace-v0.2.json").read_text(encoding="utf-8")
     )
+    v02 = validator_schema["properties"]["eat_profile"]["const"]
+    superseded = json.loads(
+        (packaged / "trace-v0.1.json").read_text(encoding="utf-8")
+    )["properties"]["eat_profile"]["const"]
+    assert v02 != superseded
+
+    # The schema a record is checked against carries the v0.2 identifier, whatever
+    # else ships beside it.
+    from agentrust_trace import validate as validate_module
+
+    assert validate_module._schema()["properties"]["eat_profile"]["const"] == v02
+
+    # And a record claiming the superseded identifier is refused rather than
+    # validated against the file that describes it.
+    record = _maximal_record()
+    record["eat_profile"] = superseded
+    with pytest.raises(jsonschema.ValidationError):
+        validate_json(record)
 
 
 @pytest.mark.parametrize("relative", sorted(UNBOUNDED_SCHEMAS))

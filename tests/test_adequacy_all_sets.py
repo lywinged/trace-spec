@@ -71,6 +71,11 @@ def build_provenance_depth() -> list[Vector]:
                  lambda e: deepest(e)["outcome"], codes, separates_at)
 
 
+def verifier_compatibility() -> list[Vector]:
+    return _load("verifier-compatibility",
+                 lambda e: e["outcome"], lambda e: [e.get("failure")])
+
+
 def canonicalization_boundary() -> list[Vector]:
     return _load("canonicalization-boundary",
                  lambda e: e["outcome"], lambda e: [e.get("failure")])
@@ -118,6 +123,7 @@ SETS = {
     "build-provenance-depth": (build_provenance_depth, _depth_boundary),
     "canonicalization-boundary": (canonicalization_boundary, None),
     "delegation-link": (delegation_link, None),
+    "verifier-compatibility": (verifier_compatibility, None),
 }
 
 # Every set must be able to fail both unconditional implementations. A set that
@@ -152,7 +158,20 @@ def test_no_set_is_satisfied_by_an_unconditional_answer(name: str) -> None:
 
 # The shortfall this repository currently carries, stated exactly. Widening it fails
 # here; closing it fails here too, and the entry is then deleted.
-KNOWN_THIN: dict[str, dict[str, str]] = {}
+KNOWN_THIN: dict[str, dict[str, str]] = {
+    # This fork's own set, and the shape #124 established as insufficient. Four of its
+    # five refusal rules carry one vector each, on a set written here before that rule
+    # existed. Listed rather than skipped: a named shortfall asserted to its exact
+    # extent cannot widen unnoticed, and each entry is deleted when someone writes the
+    # second vector. `unschemaed_profile_in_accepted_set` is absent because it has two,
+    # which is what closing one of these looks like.
+    "verifier-compatibility": {
+        "no_accepted_profiles": "06-empty-accepted-set-refused",
+        "profile_absent": "07-profile-absent-refused",
+        "superseded_profile_in_accepted_set": "08-dual-accept-configuration-refused",
+        "superseded_profile_refused": "03-superseded-version-refused",
+    },
+}
 
 
 @pytest.mark.parametrize("name", sorted(SETS))
