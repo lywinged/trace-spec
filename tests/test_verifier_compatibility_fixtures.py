@@ -133,3 +133,43 @@ def test_every_fixture_signature_is_genuine() -> None:
             max_age_seconds=None,
             accepted_profiles=[profile],
         )
+
+
+@pytest.mark.parametrize(
+    "unschemaed",
+    [
+        "tag:example.test,2026:made-up-v9",
+        "tag:agentrust-io.com,2027:trace-v0.3",
+        "urn:not-a-profile",
+    ],
+)
+def test_the_ceiling_refuses_any_profile_no_schema_covers(unschemaed: str) -> None:
+    """The ceiling is enforced for every profile outside it, not only for the ones
+    a vector happens to name.
+
+    `profiles_with_schema()` is the ceiling on any accepted set: a verifier can only
+    honestly accept a profile whose shape it can check. Two things guard that today
+    and neither guards this. `test_sign.py` pins the ceiling's *contents*, which a
+    widening at the call site does not touch; vector 04 proves one specific
+    unschemaed profile is refused, which a widening that admits a *different* one
+    leaves green.
+
+    Measured: adding a single fictional identifier to the set the enforcement
+    consults, and changing nothing else, passed all 932 tests. This is the test that
+    fails on it. Synthetic identifiers rather than vector ones, so it cannot be
+    satisfied by whatever the corpus currently contains.
+    """
+    from agentrust_trace.validate import profiles_with_schema
+
+    assert unschemaed not in profiles_with_schema(), (
+        f"{unschemaed} is now a packaged profile, so it is the wrong probe for this"
+    )
+
+    fixture = _load(FIXTURE_DIR / "01-known-version-verified.json")
+    with pytest.raises(ValueError, match="carries no schema|carry no schema|can check"):
+        verify_record(
+            fixture["record"],
+            fixture["trusted_key"],
+            max_age_seconds=None,
+            accepted_profiles=[unschemaed],
+        )
