@@ -58,24 +58,24 @@ That choice is not cosmetic; §3 explains what it changes.
 
 ```
 verifier: tests/test_action_receipt_fixtures.py
-vectors:  24
-sites:    21 (19 append-literal, 2 inline early-return)
+vectors:  48
+sites:    23 (0 append, 1 inline, 22 registry)
 
-[margins] status-only : min=0 max=1 mean=0.86
-[margins] full outcome: min=1 max=2 mean=1.05
+[margins] status-only : min=0 max=2 mean=1.74
+[margins] full outcome: min=2 max=3 mean=2.04
 
 [load-bearing] every obligation is held by at least one vector
 [attribution]  every rule is held by a vector that names it
-[masking]      no rule is masked by any other (all 210 pairs, all 1330 triples)
+[masking]      no rule is masked by any other (all 253 pairs, all 1771 triples)
 ```
 
-**21 of 21 obligations are load-bearing, and every one is correctly attributed.**
+**23 of 23 obligations are load-bearing, and every one is correctly attributed.**
 
 Set beside seven external corpora measured with the same instrument:
 
 | Corpus | Obligations | Held | Margin med. |
 |---|---|---|---|
-| **`trace-spec` receipts** | **21** | **21** | **1** |
+| **`trace-spec` receipts** | **23** | **23** | **2** |
 | JSON Schema Test Suite × `jsonschema` | 36 | 35 | 12 |
 | JSON Schema Test Suite × `ajv` | 63 | 36 | 17 |
 | Unicode UTS46 × `idna` | 26 | 19 | 52 |
@@ -101,29 +101,41 @@ The audited implementation exempts warnings from the load-bearing test, on the r
 *a warning does not alter the outcome by design, so dropping one cannot change any vector's
 status.* That reasoning is sound **given a status-only oracle** and false without one.
 
-Under the full-outcome oracle, `issuer_not_independent` has margin 1: dropping it changes
-exactly one vector's emitted warning list, and a vector notices. **The warning is
+Under the full-outcome oracle, `issuer_not_independent` has margin 2: dropping it changes
+the emitted warning list of two vectors, and both notice. **The warning is
 load-bearing and testable.** The exemption was never a property of warnings; it was the
 coarse comparison showing through as a false constraint.
 
 **Recommendation:** delete the exemption and let the criterion cover warnings.
 
-### 3.2 Two obligations have never received the strong criterion
+### 3.2 Obligations outside the criterion for reasons of code shape
 
-The audited load-bearing test is parametrized over `append` sites only. Two codes —
-`receipt_gap_disclosed` and `receipt_missing` — are emitted through **inline literal lists on
-early returns**, so they are checked for *named* coverage and never mutated.
+*Measured again after the registry refactor; the finding stands and its subject changed.*
 
-Both turn out to be load-bearing (margins 2 and 1). No harm was done. But they were outside
-the criterion for reasons of code shape rather than of principle, and the inventory guard
-found them by counting what it could see and comparing against what the test touched.
+As first measured, the audited load-bearing test was parametrized over `append` sites only,
+and two codes — `receipt_gap_disclosed` and `receipt_missing` — were emitted through **inline
+literal lists on early returns**, so they were checked for *named* coverage and never mutated.
+Both were load-bearing. No harm was done. But they were outside the criterion for reasons of
+code shape rather than of principle, and the inventory guard found them by counting what it
+could see and comparing against what the test touched.
 
-**Recommendation:** parametrize over both site forms. `scripts/mutation_report.py` shows how.
+The obligations have since moved into an explicit `RULES` registry, which is a third code
+shape, and the recommendation below was then carried out for all three: discovery now covers
+`append`, inline and registry forms, and `receipt_missing` is a registry rule. One inline site
+remains, `receipt_gap_disclosed`, and it is mutated like the rest.
+
+The interval between the two measurements is the finding worth keeping. For that interval
+discovery found **one** site against a registry of twenty-two, and reported "every obligation
+is held by at least one vector" over it, exiting zero. That is failure mode 1 of §5, and §5
+had already named it before it happened.
+
+**Recommendation, carried out:** parametrize over every site form, and refuse to report when
+discovery cannot see the inventory the verifier declares.
 
 ### 3.3 A status-only criterion would report three obligations as unheld
 
 All three of `issuer_not_independent`, `receipt_gap_disclosed` and `receipt_missing` have
-status margin **0** and full-outcome margin ≥ 1. A status-only criterion reports them as
+status margin **0** and full-outcome margin **2**. A status-only criterion reports them as
 gaps, and would send someone to write vectors **that already exist**.
 
 The finer oracle is therefore not an optimisation. It is what makes warnings and
@@ -159,26 +171,48 @@ exercises the rule that JCS emits UTF-8 literally — a serializer that escapes 
 valid JSON that is not canonical, and every signature over it would fail against a correct
 implementation.
 
-## 5. The one thing that should be fixed: there is no margin
+## 5. The thing that should be fixed, and what happened to it
+
+*As first measured:*
 
 ```
 margin distribution, full outcome:   1 → 20 obligations
                                      2 →  1 obligation
 ```
 
-**Twenty of twenty-one obligations are held by exactly one vector.** The suite is complete and
-maximally fragile. Compare the mature corpora, where the `type` keyword in the JSON Schema
+**Twenty of twenty-one obligations were held by exactly one vector.** The suite was complete
+and maximally fragile. Compare the mature corpora, where the `type` keyword in the JSON Schema
 Test Suite is held by 151 independent cases and the UTS46 median is 52 — depth that arrives
 from many independent implementers each finding a different way to be wrong.
+
+*Measured again, after a second vector was written for every obligation:*
+
+```
+margin distribution, full outcome:   2 → 22 obligations
+                                     3 →  1 obligation
+```
+
+No obligation is now held by a single vector. That does not make the set deep in the sense the
+mature corpora are; a median of 2 against a median of 52 is still a young set, and the depth
+those corpora have comes from many independent implementers rather than from one author
+writing a second case. What it does close is the specific fragility named below: editing any
+one vector no longer silently returns a rule to unenforceable.
+
+The three failure modes are kept as written, because the first of them then happened. The
+obligations moved into a registry, which is exactly "a shape the inventory does not
+recognise", and for the interval before discovery was taught the new form the report's own
+instrument saw one site out of twenty-three and said every obligation was held. Predicting a
+failure mode is not the same as being guarded against it, and nothing here was.
 
 Concretely, three ordinary events move this repository from complete to incomplete, and
 **none of them would fail CI**:
 
 1. A new rule is added with no vector. The load-bearing test is parametrized over the rules
-   it finds, so a rule with no vector fails it — **provided the rule is written in the
-   `append("literal")` shape the inventory recognises.** Written as `extend`, `+=`, an
-   f-string or a named constant, it joins the suite invisibly, and the suite then reports
-   complete coverage of a rule set that no longer includes it.
+   it finds, so a rule with no vector fails it — **provided the rule is written in a shape the
+   inventory recognises.** Written as `extend`, `+=`, an f-string, a named constant, or as an
+   entry in a registry the discovery does not read, it joins the suite invisibly, and the
+   suite then reports complete coverage of a rule set that no longer includes it. This is the
+   one that happened.
 2. A vector is deleted or edited during unrelated work. Nothing warns that it was the only
    thing holding an obligation.
 3. Two rules are written that both reject the same input. Neither becomes free today —
@@ -196,6 +230,12 @@ shapes. Each time the count looked plausible. Each time a guard, not a reviewer,
 - **Adopt `scripts/inventory_guard.py` into CI.** It finds nothing today, which is the
   expected result for a codebase written by one person in one idiom. Its value is prospective
   and its cost is one test.
+
+  *This was not done, and the cost of not doing it is the reason every figure above had to be
+  re-measured.* Nothing in `tests/` or `.github/` referenced `coverage-report/scripts/` at
+  all, so the instrument was run by hand, once, and the document kept reporting what it said
+  that day. `tests/test_report_figures_are_measured.py` now runs the measurement and pins both
+  sides: the figures the tool produces, and the figures this document states.
 - **Print the margin distribution in the existing test's output.** A one-line change that
   turns "complete" into "complete, and here is how thin". Consider a *ratchet* rather than a
   threshold: fail when an obligation's margin drops below what it was, since a young suite
@@ -203,8 +243,8 @@ shapes. Each time the count looked plausible. Each time a guard, not a reviewer,
 - **Add a second vector for the obligations whose failure would be most expensive** —
   signature validity, chain continuity, freshness. Not for coverage, which is already
   complete, but for margin.
-- Re-run `scripts/pair_mutation.py` when the rule count grows. Rank two is cheap (210 pairs,
-  ~3 seconds); rank three is ~18 seconds and found nothing beyond rank two here.
+- Re-run `scripts/pair_mutation.py` when the rule count grows. Rank two is cheap (253 pairs,
+  ~7 seconds); rank three is ~46 seconds and found nothing beyond rank two here.
 
 ## 6. What this report does not establish
 
