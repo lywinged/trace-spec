@@ -98,6 +98,37 @@ def _verify_naive(signed: dict[str, Any], jwk: dict[str, str]) -> None:
     key.verify(_b64url(signed["signature"]), body)
 
 
+def _reconcile_against_the_registry(codes: set[str]) -> set[str]:
+    """Refuse to run if any code here is one the verifier does not register.
+
+    A name in this set that nothing emits does not fail loudly on its own: the check
+    simply never matches it, the negative class it stands for stops being recognised,
+    and the vectors carrying it are reported as problems. That is what happened, and it
+    survived a rename because nothing tied the two together.
+
+    The verifier's `RULES` registry is that tie. If it cannot be imported the set is
+    returned unchecked, since this script is also run against trees that predate the
+    registry, and a reconciliation that cannot run is not a reason to refuse the rest.
+    """
+    sys.path.insert(0, str(TRACE_SPEC / "tests"))
+    try:
+        import test_action_receipt_fixtures as verifier
+    except Exception:
+        return codes
+    registered = {rule.code for rule in getattr(verifier, "RULES", ())}
+    if not registered:
+        return codes
+    unknown = sorted(codes - registered)
+    if unknown:
+        raise SystemExit(
+            f"check_canonicalizer: {len(unknown)} code(s) in `deliberately_bad` are not "
+            f"registered by the verifier: {unknown}. The negative classes they name are "
+            "invisible until the names match, and the vectors carrying them are reported "
+            "as defects. Update the set."
+        )
+    return codes
+
+
 def _signed_bodies(document: dict[str, Any]) -> list[tuple[str, dict, dict]]:
     """Return (label, signed_object, trusted_key_map) for each signature in a fixture."""
     found = []
@@ -124,17 +155,30 @@ def signatures() -> tuple[int, int, list[str]]:
     verified = 0
     negatives = 0
     problems: list[str] = []
-    deliberately_bad = {
+    # Codes that mean the signing key is deliberately not resolvable, or the signature
+    # deliberately wrong. Two of these read `issuer_key_untrusted` and
+    # `disclosure_key_untrusted` until this change, and nothing has emitted those names
+    # since they were renamed to `_unknown`: zero occurrences under `src/`, `tests/`,
+    # `examples/` and `schema/`. For as long as that stood, the two classes they name were
+    # invisible to the check below, and the four vectors that carry them were reported as
+    # defects rather than recognised as the negative cases they are.
+    deliberately_bad = _reconcile_against_the_registry({
         "signature_or_key_mismatch",
-        "issuer_key_untrusted",
+        "issuer_key_unknown",
         "disclosure_signature_invalid",
-        "disclosure_key_untrusted",
-    }
+        "disclosure_key_unknown",
+    })
 
     for path in sorted(EXAMPLES.rglob("*.json")):
         document = json.loads(path.read_text(encoding="utf-8"))
         expected = document.get("expected", {})
-        is_negative = bool(deliberately_bad & set(expected.get("failures", [])))
+        # Both lists. Two of the four codes are registered `warning` rather than `failure`,
+        # and which severity the verifier assigns is orthogonal to why this check cares:
+        # the question here is whether the vector meant the key to be unresolvable, not
+        # what the verdict does about it. Membership of the set above is what keeps this
+        # narrow; reading only `failures` is what made it wrong.
+        declared = set(expected.get("failures", [])) | set(expected.get("warnings", []))
+        is_negative = bool(deliberately_bad & declared)
 
         for label, signed, keymap in _signed_bodies(document):
             jwk = (
