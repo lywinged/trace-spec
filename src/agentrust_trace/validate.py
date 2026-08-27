@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.resources
 import json
 from functools import lru_cache
@@ -48,8 +49,19 @@ def profiles_with_schema() -> frozenset[str]:
     return frozenset(found)
 
 
-# Canonical schema exposed for downstream tooling that needs the raw dict.
-SCHEMA: dict[str, Any] = _schema()
+#: Canonical schema exposed for downstream tooling that needs the raw dict.
+#:
+#: A copy, deliberately. `_schema()` is `lru_cache`d and `_validator()` is built over
+#: whatever it returns, so this name used to be the live object the validator reads.
+#: Mutating it, which is the ordinary thing to do with a dict you were handed to adapt,
+#: silently reconfigured `validate_json`, `iter_errors` and the structural gate inside
+#: `sign.verify_record`, process-wide, for every later call. Lowering
+#: `SCHEMA["properties"]["iat"]["minimum"]` made a record dated 1970 valid everywhere.
+#:
+#: The copy is taken once, so two callers that both mutate it still see each other. That
+#: is an ordinary shared-object surprise. Reaching into the verifier from outside it is
+#: not, and it is the half worth closing.
+SCHEMA: dict[str, Any] = copy.deepcopy(_schema())
 
 
 def validate_json(record: dict[str, Any]) -> None:
