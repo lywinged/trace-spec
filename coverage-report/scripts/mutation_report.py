@@ -24,7 +24,7 @@ over `append` sites only, so codes emitted through inline `failures=[...]` /
 `warnings=[...]` arguments on early returns are checked for named coverage and never
 mutated. Those obligations never receive the strong criterion at all. Here they are
 mutated by deleting the code from the literal list, which models an implementation that
-takes the same path and does not report the finding — and which is invisible to a
+takes the same path and does not report the finding, and which is invisible to a
 status-only oracle, so it also demonstrates why (5) is needed.
 
 Run: python mutation_report.py [path-to-trace-spec]
@@ -55,8 +55,8 @@ sys.path.insert(0, str(TRACE_SPEC / "tests"))
 # directory down, in `conformance/proposal-117/`, was invisible. That is not a
 # miscount, it changes the answers. `receipt_gap_disclosed` is held by exactly two
 # vectors and both are down there, so this script reported the obligation as held by
-# nothing and exited non-zero, and `pair_mutation` and `triple_mutation` — which
-# import FIXTURES from here — reported "no rule is masked" and "nothing new at rank
+# nothing and exited non-zero, and `pair_mutation` and `triple_mutation`, which
+# import FIXTURES from here: reported "no rule is masked" and "nothing new at rank
 # three" over a corpus missing a fifth of itself, exiting zero while doing it.
 #
 # It is the defect of agentrust-io/trace-spec#208, which upstream closed for its two
@@ -67,7 +67,7 @@ from test_action_receipt_fixtures import discover_fixtures  # noqa: E402
 FIXTURES = discover_fixtures(FIXTURE_DIR)
 
 # Rules a vector set may leave unmutated, each with the reason. Consulted by *every*
-# criterion here — the audited implementation consults its equivalent for named coverage
+# criterion here: the audited implementation consults its equivalent for named coverage
 # and not for load-bearing, which is latent rather than live only because the map is empty.
 UNTESTABLE: dict[str, str] = {}
 
@@ -153,7 +153,7 @@ def drop_sites(tree: ast.Module, sites: Sequence[Site]) -> ast.Module:
         def visit_Expr(self, node: ast.Expr) -> ast.AST:
             # `pass`, not deletion: a rule that is the sole body of an `if` would leave an
             # empty block, the mutant would fail to compile, and every vector would
-            # "change" — scoring the rule load-bearing for the wrong reason, uniformly.
+            # "change": scoring the rule load-bearing for the wrong reason, uniformly.
             return (
                 ast.copy_location(ast.Pass(), node) if node.lineno in append_lines else node
             )
@@ -282,7 +282,7 @@ def _run_mutant(site: Site) -> list[tuple[str, str, tuple, tuple]]:
     mutated = drop_sites(_tree(), [site])
 
     # A real, registered module: `@dataclass` resolves sys.modules[cls.__module__], so
-    # exec'ing into a bare dict raises before any vector runs — which reads as "every rule
+    # exec'ing into a bare dict raises before any vector runs, which reads as "every rule
     # matters" while testing nothing.
     name = f"_mutant_{site.form}_{site.lineno}"
     module = types.ModuleType(name)

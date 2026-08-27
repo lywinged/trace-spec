@@ -7,12 +7,12 @@ entry that names the one it supersedes; do not edit the old entry.
 
 ---
 
-## 2026-08-18 — A verifier may only accept a profile it carries a schema for
+## 2026-08-18: A verifier may only accept a profile it carries a schema for
 
 **Recorded by:** Claude (Opus 5)
 **Status:** DECIDED and applied
 
-**Supersedes** the second half of `2026-08-07 — The v0.1 identifier is refused wherever
+**Supersedes** the second half of `2026-08-07: The v0.1 identifier is refused wherever
 it appears`, which redirected vector 04's downgrade target to a fictional
 `tag:example.com,2025:trace-v0.0` profile. That fixed the conformance problem it was
 aimed at. It did not notice that no record under that profile could ever verify here,
@@ -54,7 +54,7 @@ measurement, and that was already posted on 2026-08-13.
 
 ---
 
-## 2026-08-10 — The fork was rebuilt on upstream rather than rebased onto it
+## 2026-08-10: The fork was rebuilt on upstream rather than rebased onto it
 
 **Recorded by:** Claude (Opus 5)
 **Decision-maker:** Louie Lu
@@ -72,7 +72,7 @@ superseded and released three times over. Replaying thirty-three commits against
 of upstream's would have resolved early commits into shapes that no longer meant anything.
 
 Rebuilt instead: `main` reset to `upstream/main`, then the genuinely fork-only material
-re-applied. The old history is not discarded — it is tagged `archive/pre-576507b` and
+re-applied. The old history is not discarded: it is tagged `archive/pre-576507b` and
 pushed, so the reasoning behind any of it stays reachable.
 
 Four files needed a real merge rather than a copy, and the direction was not the same for
@@ -80,13 +80,13 @@ all four. `models.py` and `__init__.py` are upstream's plus this fork's two prof
 constants: upstream had moved on with `origin` and the `declared` enforcement mode, which
 a wholesale copy would have dropped. `sign.py` and `test_sign.py` are this fork's richer
 `accepted_profiles` version, which supersedes the minimal cutover check upstream took from
-`#125` — that supersession was predicted in `CLAUDE.md` §5 when `#125` was offered. All
+`#125`: that supersession was predicted in `CLAUDE.md` §5 when `#125` was offered. All
 four merged cleanly under a three-way merge against `a817621`, which is where the two
 histories last agreed.
 
 The crosswalk guard earned its place in the same run. Upstream added two normative
-statements this fork had never seen — the `origin.kind`/`software-only` rule from `#135`
-and the `declared` enforcement mode from `#143` — and `test_normative_crosswalk.py` failed
+statements this fork had never seen: the `origin.kind`/`software-only` rule from `#135`
+and the `declared` enforcement mode from `#143`, and `test_normative_crosswalk.py` failed
 until both had rows. That is the check working: a source-derived inventory noticing that
 its subject moved, which is the property the document exists to have.
 
@@ -94,7 +94,7 @@ its subject moved, which is the property the document exists to have.
 
 ---
 
-## 2026-08-08 — An unsealed tail disclosure is unverified, not disclosed
+## 2026-08-08: An unsealed tail disclosure is unverified, not disclosed
 
 **Recorded by:** Claude (Fable 5)
 **Decision-maker:** Louie Lu
@@ -103,8 +103,8 @@ its subject moved, which is the property the document exists to have.
 Found while reviewing our own work before replying to the #117 review, and fixed
 before replying rather than shipped alongside the reply. The draft normative text said
 a disclosure not linked from both directions "MUST NOT be treated as covering
-anything"; the reference verifier granted a clean tail disclosure — no successor yet,
-everything else valid — full `receipt_gap_disclosed`, and no fixture pinned either
+anything"; the reference verifier granted a clean tail disclosure: no successor yet,
+everything else valid: full `receipt_gap_disclosed`, and no fixture pinned either
 reading. Fail-open, and adversarially relevant: a chain truncated immediately after a
 disclosure is indistinguishable from an honest tail, so whatever the verifier granted
 the honest tail it granted the truncation, and the successor seal that the
@@ -113,7 +113,7 @@ replay-refusal argument leans on does not exist at the tail.
 Resolution reuses the spec's own §3.3.1 principle a third time (unknown receipt key,
 unknown disclosure key, and now an unborn successor): inability to check is not
 evidence of a defect. New warning rule `disclosure_not_yet_sealed`; a clean tail
-yields `gap_disclosure_unverified` with the advisory — accusing no one, conferring
+yields `gap_disclosure_unverified` with the advisory: accusing no one, conferring
 nothing, upgrading on re-verification once the chain resumes and the seal exists.
 Two vectors (proposal-117/17, 18) and a declared separating defect (deriving
 sealed-ness from the successor-link field's non-nullness instead of the successor's
@@ -121,7 +121,7 @@ existence), per the margin and independence rules this tree now enforces on itse
 
 ---
 
-## 2026-08-08 — The #124 and #117 reviews landed; the instrument and the fixtures changed shape under them
+## 2026-08-08: The #124 and #117 reviews landed; the instrument and the fixtures changed shape under them
 
 **Recorded by:** Claude (Fable 5)
 **Decision-maker:** carloshvp's review comments, applied by Louie Lu's fork
@@ -132,7 +132,7 @@ the two open issues this fork's remaining work hangs on. Both reviews were speci
 enough to act on, and both were acted on rather than argued with, because both were
 right.
 
-**#124 (coverage checker):** stays in `trace-spec` — both things it measures are local
+**#124 (coverage checker):** stays in `trace-spec`: both things it measures are local
 here, and moving source-coupled mutation logic into `trace-tests` would turn the
 portable suite into an implementation test. The blocking design point: the obligation
 inventory must not rest on AST searches for string literals, whose blind spots
@@ -145,7 +145,7 @@ weakened-check defects (fail-closed: a rule without a declared defect fails the 
 **#117 (gap disclosure):** the chain-element shape is confirmed viable; the verifier
 claim stays narrower than "covers the missing range". Changes applied: `cause` demoted
 from required enum to optional descriptive field alongside `receipts_lost_estimate`;
-stream binding is now checked (`disclosure_stream_mismatch` — the field was present and
+stream binding is now checked (`disclosure_stream_mismatch`: the field was present and
 signed, and never compared); and the draft states that no policy may read
 `receipt_gap_disclosed` as satisfying a profile requiring independently proven
 completeness.
@@ -158,7 +158,7 @@ rule landed as top-level 17-30 and proposal-117/09-16.
 
 ---
 
-## 2026-08-07 — The cutover is enforced, and vector 04 no longer contradicts it
+## 2026-08-07: The cutover is enforced, and vector 04 no longer contradicts it
 
 **Recorded by:** Claude (Fable 5)
 **Decision-maker:** Louie Lu
@@ -170,7 +170,7 @@ with it, and both were ours.
 
 1. **`verify_record` executed the forbidden configuration.** Its docstring said that
    adding `TRACE_PROFILE_V0_1` to `accepted_profiles` "produces a verifier that is not
-   v0.2-conformant" — documented, and then honored: the caller who did it got a
+   v0.2-conformant": documented, and then honored: the caller who did it got a
    verifier that accepts v0.1 records. Now the set itself is refused with `ValueError`
    before any record is read. The non-conformant verifier is unrepresentable, in the
    same way silent downgrade already was. Removing the guard fails two tests.
@@ -178,7 +178,7 @@ with it, and both were ours.
 2. **Vector `04-downgrade-disclosed` encoded that forbidden verifier as a positive
    case.** It declared `[v0.2, v0.1]` and expected a v0.1 record to verify with the
    downgrade disclosed. Disclosure does not license what the cutover forbids. The
-   vector now downgrades to a fictional `tag:example.com,2025:trace-v0.0` profile —
+   vector now downgrades to a fictional `tag:example.com,2025:trace-v0.0` profile:
    the same instance `test_sign.py` always used, which is how the library tests stayed
    clean while the portable vectors did not. Vector 05 follows for narrative
    consistency, and a new vector 08 pins the dual-accept refusal itself.
@@ -189,7 +189,7 @@ because the spec says exactly that and the point of the vectors is to encode the
 
 ---
 
-## 2026-08-07 — An unknown issuer key yields "unverified", not "invalid"
+## 2026-08-07: An unknown issuer key yields "unverified", not "invalid"
 
 **Recorded by:** Claude (Fable 5)
 **Decision-maker:** Louie Lu
@@ -200,7 +200,7 @@ does not hold as `receipt_invalid`, with `issuer_key_untrusted` /
 `disclosure_key_untrusted` failures. The spec says otherwise, and said it before we
 wrote the fixtures: section 3.3.1, "a receipt whose issuer key is unknown to the
 verifier is unverified, not invalid". The contradiction was ours. It was found by
-surveying the spec's normative statements against their enforcement points — the same
+surveying the spec's normative statements against their enforcement points: the same
 sweep that produced several findings against upstream, of which this one pointed back
 at us.
 
@@ -219,16 +219,16 @@ amend it is a separate, outward-facing decision.
 
 ---
 
-## 2026-08-05 — Neither #116 nor #117 is resolved by this branch, and here is exactly what is
+## 2026-08-05: Neither #116 nor #117 is resolved by this branch, and here is exactly what is
 
 **Recorded by:** Claude (Opus 5)
 **Decision-maker:** Louie Lu
-**Status:** RECORD — a statement of delivered scope, not a decision to approve
+**Status:** RECORD: a statement of delivered scope, not a decision to approve
 
 Written because "the tests pass" is not the same claim as "the issue is closed", and the
 gap between them is where a contribution over-states itself.
 
-### #116 — format-versioning and verifier-compatibility obligations
+### #116: format-versioning and verifier-compatibility obligations
 
 | The issue asks for | State |
 |---|---|
@@ -243,7 +243,7 @@ gap between them is where a contribution over-states itself.
 specification requiring it, and the issue asks for the second.
 
 **One genuine fix, separable from the proposal.** `verify_record()` never read
-`eat_profile` at all, so a record under any profile verified as if it were v0.2 — while
+`eat_profile` at all, so a record under any profile verified as if it were v0.2, while
 `spec/trace-v0.2.md` already requires a v0.2 verifier to reject the v0.1 identifier. That
 is an already-merged requirement the reference implementation did not carry out, in the
 same shape as the revocation gap closed in #113, and it needs no window and no sponsor.
@@ -272,7 +272,7 @@ So `trace-spec` is the right home while the mechanism is a proposal. The move to
 `trace-tests` is what happens *after* normative text lands, not before, and it is
 gated on that rather than pending.
 
-### #117 — GapDisclosure claim and the fifth verifier outcome
+### #117: GapDisclosure claim and the fifth verifier outcome
 
 | The issue asks for | State |
 |---|---|
@@ -300,7 +300,7 @@ leaves open recorded next to the fixtures.
   proves the fixtures and the checker agree, and one hand wrote both.
 - **Coverage.** 97% overall; the new profile-handling code is fully covered and the
   eleven uncovered statements are pre-existing error branches.
-- **195 tests, ruff, and mypy strict pass on 3.11, 3.12, 3.13 and 3.14** — the full CI
+- **195 tests, ruff, and mypy strict pass on 3.11, 3.12, 3.13 and 3.14**: the full CI
   matrix, verified locally and confirmed green on the branch after push.
 
 None of that establishes that the proposals are correct. It establishes that the vectors
@@ -309,11 +309,11 @@ generator.
 
 ---
 
-## 2026-08-05 — Ship the #117 vectors now; the comment window is ambiguous, so ask
+## 2026-08-05: Ship the #117 vectors now; the comment window is ambiguous, so ask
 
 **Recorded by:** Claude (Opus 5)
 **Decision-maker:** Louie Lu
-**Status:** ACCEPTED 2026-08-05 — decision delegated by Louie Lu. Already in force: the
+**Status:** ACCEPTED 2026-08-05: decision delegated by Louie Lu. Already in force: the
 vectors shipped and no normative text was written.
 
 **Decision:**
@@ -329,7 +329,7 @@ vectors shipped and no normative text was written.
      "Wire format changes: treated as breaking regardless of backward-compatibility
      argument." `GapDisclosure` is a new signed claim that travels on the wire with its own
      canonicalization and signature convention, and #117 itself proposes gating the new
-     outcome behind the widened profile version from #114 — a profile URI change is what
+     outcome behind the widened profile version from #114: a profile URI change is what
      made v0.2 breaking.
 
    Counting from 2026-08-02: 5 days closes 2026-08-07, 14 days closes 2026-08-16. The
@@ -347,7 +347,7 @@ vectors shipped and no normative text was written.
    `GOVERNANCE.md` requires an organizational sponsor for normative text, and names the
    route when there is none: a Maintainer carries the PR and the proposer is credited in
    the CHANGELOG. This branch relies on neither, because everything on it is in the
-   no-sponsor set — conformance tests, tooling, informative documentation, and one fix that
+   no-sponsor set: conformance tests, tooling, informative documentation, and one fix that
    implements an already-merged requirement.
 
 4. **The fork's Actions are enabled** (verified 2026-08-05), so a PR from it arrives with a
@@ -356,7 +356,7 @@ vectors shipped and no normative text was written.
 **Rationale:**
 
 Getting the window wrong is not a technical error, it is a governance one, and a proposal
-that arrives early reads as not having read the rules — the worst possible framing for a
+that arrives early reads as not having read the rules: the worst possible framing for a
 first normative contribution to a standards project. The nine days between 08-07 and 08-16
 cost nothing: the vectors are the deliverable that demonstrates the work, and they can land
 immediately.
@@ -375,11 +375,11 @@ vectors were always shippable on their own schedule.
 
 ---
 
-## 2026-08-05 — This project's own release evidence is Level 0, and is never described as attested
+## 2026-08-05: This project's own release evidence is Level 0, and is never described as attested
 
 **Recorded by:** Claude (Opus 5)
 **Decision-maker:** Louie Lu
-**Status:** ACCEPTED 2026-08-05 — decision delegated by Louie Lu. Point 2 binds how this
+**Status:** ACCEPTED 2026-08-05: decision delegated by Louie Lu. Point 2 binds how this
 project's own releases are described in public, everywhere, not only in this repository.
 To say otherwise, append a superseding entry; do not edit this one.
 
@@ -387,7 +387,7 @@ To say otherwise, append a superseding entry; do not edit this one.
 
 1. **trace-spec publishes an evidence chain for its own releases.** Shipped now: SLSA v1
    build provenance over every distribution file, plus a signed SBOM bound to those same
-   digests, both via `actions/attest@v4` — short-lived Sigstore certificates, logged to
+   digests, both via `actions/attest@v4`: short-lived Sigstore certificates, logged to
    Rekor, verifiable by anyone with `gh attestation verify`. A project that defines
    `build_provenance.provenance_uri` and points it at "a Sigstore/Rekor or compatible log"
    should be able to produce one for itself.
@@ -395,7 +395,7 @@ To say otherwise, append a superseding entry; do not edit this one.
 2. **That evidence is Level 0, and is never presented as anything else.** GitHub-hosted
    runners are not a TEE. Nothing in this pipeline is hardware-rooted, and
    `LIMITATIONS.md` already states that Level 0 is "suitable for development and audit
-   trail tooling only — not for third-party verification". Public wording about the
+   trail tooling only: not for third-party verification". Public wording about the
    project's own releases says what it is: *the build is provenance-signed and
    transparency-logged; it is not hardware-attested.* No release note, README line, slide,
    or demo says or implies otherwise.
@@ -415,7 +415,7 @@ To say otherwise, append a superseding entry; do not edit this one.
 
 The value of TRACE is the precision of what a record does and does not prove. A project
 that overstates its own evidence has argued against its own thesis, and the overstatement
-would be found by exactly the audience — auditors, CISOs, standards reviewers — the
+would be found by exactly the audience (auditors, CISOs, standards reviewers) the
 project is trying to convince. The same discipline applies wherever a
 certification is quoted: one that belongs to a chip does not transfer to the operating
 system running on it, nor to the application above that. Different scopes, different
@@ -424,7 +424,7 @@ claims.
 The tooling half is nearly free, which is what makes the claim discipline the real
 decision rather than the engineering.
 
-**Implementation:** `.github/workflows/publish.yml` — the `Attest build provenance` and
+**Implementation:** `.github/workflows/publish.yml`: the `Attest build provenance` and
 `Attest SBOM` steps in the `build` job, plus the `attestations: write` permission they
 need.
 

@@ -52,8 +52,8 @@ def _b64url(value: str) -> bytes:
 def _every_value(node: Any):
     """Every dict and list in the corpus, not only the signed bodies.
 
-    Canonicalization defects live in the shape of the data — key ordering, escaping,
-    nesting — so the widest input set is the useful one.
+    Canonicalization defects live in the shape of the data: key ordering, escaping,
+    nesting, so the widest input set is the useful one.
     """
     yield node
     if isinstance(node, dict):

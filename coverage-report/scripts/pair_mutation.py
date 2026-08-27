@@ -1,4 +1,4 @@
-"""Section 8.1 item 6 — second-order mutation, to test the masking claim in section 7.5.
+"""Section 8.1 item 6: second-order mutation, to test the masking claim in section 7.5.
 
 The paper asserts that first-order mutation cannot see mutual masking: *two rules that
 always co-fire can each be individually load-bearing while no vector distinguishes an
@@ -7,7 +7,7 @@ asserted, not measured. This measures it.
 
 The question has to be posed carefully, because the obvious version is trivially true.
 Asking "does dropping both rules change some vector?" always answers yes when each rule is
-individually load-bearing — the joint mutant inherits both effects. That is not the
+individually load-bearing: the joint mutant inherits both effects. That is not the
 conformance question anyone cares about.
 
 The question that matters is **conditional**:
@@ -19,7 +19,7 @@ Formally, *a* is **masked by** *b* when `outcomes(drop {a, b}) == outcomes(drop 
 they are equal, then once *b* is gone, *a* is free: no vector in the set distinguishes an
 implementation that skips both from one that skips only *b*. A certification suite that
 permits this is issuing a mark that means less for a partially-conformant implementation
-than it does for a fully-conformant one — and partial conformance is the realistic case.
+than it does for a fully-conformant one, and partial conformance is the realistic case.
 
 This matters here in particular because the margin distribution is 1 almost everywhere
 (section 6.3). A rule held up by a single vector is a rule whose enforcement depends on
@@ -122,12 +122,12 @@ def main() -> int:
 
     if masked:
         print(f"[masking] {len(masked)} ordered pair(s) where the first is free once the")
-        print("          second is already omitted — no vector distinguishes an")
+        print("          second is already omitted: no vector distinguishes an")
         print("          implementation skipping both from one skipping only the second:")
         for a, b in masked:
             print(f"  {a}  is masked by  {b}")
     else:
-        print("[masking] no rule is masked by any other: for every pair, omitting the")
+        print("[masking] no rule is masked by any other, for every pair, omitting the")
         print("          second does not make omitting the first free.")
 
     return 1 if (masked or joint_invisible) else 0

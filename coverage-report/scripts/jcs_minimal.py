@@ -111,7 +111,7 @@ def _serialize(value: Any) -> str:
     if isinstance(value, float):
         raise NotCanonicalizable(
             f"float {value!r}: ECMAScript Number::toString is not implemented here on "
-            "purpose — see this module's docstring"
+            "purpose: see this module's docstring"
         )
 
     if isinstance(value, str):

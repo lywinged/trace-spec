@@ -7,7 +7,7 @@
 
 **Governance:** normative text. Needs a sponsor or a Maintainer to carry it. Neither has
 been sought. The comment window on #117 is also unresolved between five and fourteen days
-— see `DECISIONS.md`.
+: see `DECISIONS.md`.
 
 **Depends on:** [`117-gap-disclosure-design.md`](117-gap-disclosure-design.md), which
 settles the four checks the issue leaves undefined. **This draft departs from the field
@@ -55,7 +55,7 @@ is precision without evidence, and it was dropped with the review.
 **Stream binding.** The `session_id` is covered by the signature, and a verifier MUST
 reject a disclosure whose `session_id` does not match the receipt stream under
 verification. Without that comparison, a disclosure honestly signed for one stream is a
-transplantable excuse for a gap in any other — replay, in the position where replay is
+transplantable excuse for a gap in any other: replay, in the position where replay is
 hardest to distinguish from recovery.
 
 **Chain binding.** A `GapDisclosure` MUST be spliced into the receipt chain at the point
@@ -66,7 +66,7 @@ directions has not been sealed into the chain and MUST NOT be treated as coverin
 anything.
 
 That requirement has a window in which it cannot be met honestly: at the live tail of
-the chain — after the failure, before resumption — the sealing successor does not exist
+the chain (after the failure, before resumption) the sealing successor does not exist
 yet. A verifier meeting a tail disclosure whose other checks pass MUST NOT report
 `receipt_gap_disclosed`, and MUST NOT report `receipt_invalid` either: the absence of a
 successor is an inability to check, not evidence of a defect (the same principle as
@@ -135,13 +135,13 @@ exactly the detail a relying party's policy needs.
 `range_start_after` under the name the chain already uses; the other two are the hash of a
 successor that does not exist when the disclosure is written. The
 [#117 review](https://github.com/agentrust-io/trace-spec/issues/117) reached the same
-conclusion independently — chain links suffice — and the conformance fixtures under
+conclusion independently, chain links suffice, and the conformance fixtures under
 `examples/action-receipts/conformance/proposal-117/` implement this draft's shape.
 
 **What a disclosed gap does not establish.** That the receipts were lost rather than
 suppressed. An emitter can drop receipts deliberately and disclose the drop; the
-disclosure makes the absence *visible and attributable*, not innocent. Nor — stated with
-the review's precision — can it establish that the missing receipts ever existed, how
+disclosure makes the absence *visible and attributable*, not innocent. Nor: stated with
+the review's precision: can it establish that the missing receipts ever existed, how
 many were lost, or that the issuer did not selectively omit them. What the splice
 proves is *where* the gap sits in the chain, and nothing else; every verifier claim in
 this draft is written to stay narrower than "covers the missing range". The text says

@@ -6,7 +6,7 @@ directories, rebuilds each signing input from the JSON, and verifies with `crypt
 directly, importing nothing from `agentrust_trace` and reusing no helper from the other
 test modules.
 
-**Correction.** An earlier revision claimed independence while calling `rfc8785` — the
+**Correction.** An earlier revision claimed independence while calling `rfc8785`: the
 same canonicalizer the fixture generators call. A defect in that library would have been
 invisible to both sides, so the one class of failure this module exists to catch was
 precisely the one it could not see. The claim was true about the code it did not import
@@ -87,7 +87,7 @@ SIGNATURE_FREE = {
         "the absence of a receipt is the case under test, so there is no signature"
     ),
     "17-missing-receipt-explicit-null.json": (
-        "the receipt is an explicit null — the same absence through a different "
+        "the receipt is an explicit null: the same absence through a different "
         "door, and equally without a signature"
     ),
 }

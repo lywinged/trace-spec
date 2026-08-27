@@ -5,7 +5,7 @@
 `DECISIONS.md` records decisions that were made. This file records the layer before
 that: **structural observations with evidence, a shape the fix might take, and the cost
 somebody would have to accept to take it.** An observation stays here until it is either
-offered upstream, decided against, or refuted — and a refuted one stays too, with the
+offered upstream, decided against, or refuted, and a refuted one stays too, with the
 refutation, so the next reader does not investigate it again.
 
 Every entry states what was measured, against which commit. A claim without a command
@@ -41,8 +41,8 @@ argument.**
 - **`jwk_thumbprint` existed and was not reachable.** `provenance.verify_record` compared
   the embedded key to the trusted key with `embedded != trusted_jwk`, a dict comparison,
   so a legitimately signed record whose `cnf.jwk` carried a `kid` was refused although the
-  key material was identical. RFC 7638 thumbprinting was already in the package —
-  `jwk_thumbprint` is defined in `sign.py` and exported from `__init__` — and the second
+  key material was identical. RFC 7638 thumbprinting was already in the package:
+  `jwk_thumbprint` is defined in `sign.py` and exported from `__init__`, and the second
   implementation reinvented key identity worse. Fixed in upstream #149; **the fix is the
   symptom.**
 
@@ -55,8 +55,8 @@ one command and then attributed to one of them.
 
 Both are the same failure: a number or a claim covering several objects, restated as though
 it were about one. It happened three times on 2026-08-11 alone, twice in text that reached
-a maintainer. **The corrected version of this observation is sharper, not weaker** — the
-divergence is between two siblings rather than scattered across four — which is the usual
+a maintainer. **The corrected version of this observation is sharper, not weaker**: the
+divergence is between two siblings rather than scattered across four, which is the usual
 outcome when a number is checked, and the reason to check it.
 
 **Shape of a fix.** An envelope layer that owns the parts that are the same everywhere:
@@ -66,7 +66,7 @@ and calls the envelope for the rest.
 
 **The cost, which is the maintainer's to accept and not ours to assume.** It couples the
 release cadence of three modules that currently ship independently, and
-`content_marking` would use only a fraction of it — a shared layer that one of its three
+`content_marking` would use only a fraction of it: a shared layer that one of its three
 consumers barely touches is a shared layer under pressure to grow options. Upstream shipped
 0.7.0, 0.8.0 and 0.9.0 in forty-eight hours across these files. **Nothing here should be
 built in this fork:** an envelope abstracted against a subject moving that fast is stale
@@ -106,7 +106,7 @@ plainly in its own docstring:
 > neither.
 
 Upstream #144 made `record_bytes` required with no default, which is right and closes the
-weaker hole — an assertion whose hash was never checked is a URL in a file.
+weaker hole: an assertion whose hash was never checked is a URL in a file.
 
 **But the remaining step is held by prose, and this project has explicitly rejected that
 shape.** From the maintainer on `trace-tests#53`: *"Naming is a convention; changing
@@ -129,7 +129,7 @@ exists. `grep` confirms the corollary: **no module in the package calls another 
 **Shape of a fix.** `verify_record` returns a statement of what it checked rather than
 `None`, and `verify_assertion` takes that statement instead of loose bytes. The statement
 carries the record's canonical bytes (or their digest) so the hash binding still works, plus
-which checks ran — profile pinned, revocation consulted or not, freshness bound.
+which checks ran: profile pinned, revocation consulted or not, freshness bound.
 
 **This is #116's `VerificationStatement`, reached from a second direction.** That draft
 argues for it as *a record of what a verifier checked*, so a relying party is not left
@@ -141,8 +141,8 @@ now point at the same object, which is worth saying on #116 rather than proposin
 **The honest limit, which must be stated wherever this is proposed.** Python cannot make
 such a statement unforgeable. Anyone can construct one by hand and pass it. What changes is
 that skipping verification stops being the default path and becomes a deliberate act that
-reads as one in review. That is the same class of improvement as the rule registry in #148 —
-an unregistered check cannot run — and it is weaker than that one, because a registry is
+reads as one in review. That is the same class of improvement as the rule registry in #148:
+an unregistered check cannot run, and it is weaker than that one, because a registry is
 enforced by the interpreter and a convention about who builds an object is not.
 
 ---
