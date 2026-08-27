@@ -37,6 +37,7 @@ import json
 import os
 import sys
 import types
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -76,7 +77,7 @@ class Site:
     lineno: int
     kind: str  # "failures" | "warnings"
     code: str
-    form: str  # "append" | "inline"
+    form: str  # "append" | "inline" | "registry"
 
 
 def _tree() -> ast.Module:
@@ -105,7 +106,155 @@ def _sites() -> list[Site]:
                 for element in node.value.elts:
                     if isinstance(element, ast.Constant) and isinstance(element.value, str):
                         sites.append(Site(element.lineno, node.arg, element.value, "inline"))
+
+        # The verifier's obligations live in an explicit `RULES` registry, and a rule
+        # there emits its code through the registry rather than through either literal
+        # form above. Discovering only the literal forms is how this tooling came to
+        # mutate one site against a registry of twenty-two: the registry refactor moved
+        # every obligation out of reach at once, and all three scripts kept printing a
+        # clean result over what was left. A rule is a `Rule("code", "severity", ...)`
+        # element of the tuple, and neutralising it means removing that element.
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id == "RULES" for t in targets) and isinstance(
+                node.value, (ast.Tuple, ast.List)
+            ):
+                for element in node.value.elts:
+                    if (
+                        isinstance(element, ast.Call)
+                        and isinstance(element.func, ast.Name)
+                        and element.func.id == "Rule"
+                        and len(element.args) >= 2
+                        and isinstance(element.args[0], ast.Constant)
+                        and isinstance(element.args[0].value, str)
+                        and isinstance(element.args[1], ast.Constant)
+                    ):
+                        kind = "failures" if element.args[1].value == "failure" else "warnings"
+                        sites.append(
+                            Site(element.lineno, kind, element.args[0].value, "registry")
+                        )
     return sites
+
+
+def drop_sites(tree: ast.Module, sites: Sequence[Site]) -> ast.Module:
+    """Neutralise every site in *sites*, in whichever form each one takes.
+
+    One transformer, imported by `pair_mutation` and `triple_mutation` rather than
+    restated in each. Three separately maintained copies is how a form can be added to
+    discovery and silently not applied by two of the three readers: the mutants come
+    out identical to the baseline, no vector's outcome changes, and the rule is scored
+    unheld for a reason that has nothing to do with vectors.
+    """
+    append_lines = {s.lineno for s in sites if s.form == "append"}
+    inline = {(s.lineno, s.code) for s in sites if s.form == "inline"}
+    registry = {(s.lineno, s.code) for s in sites if s.form == "registry"}
+
+    class Drop(ast.NodeTransformer):
+        def visit_Expr(self, node: ast.Expr) -> ast.AST:
+            # `pass`, not deletion: a rule that is the sole body of an `if` would leave an
+            # empty block, the mutant would fail to compile, and every vector would
+            # "change" — scoring the rule load-bearing for the wrong reason, uniformly.
+            return (
+                ast.copy_location(ast.Pass(), node) if node.lineno in append_lines else node
+            )
+
+        def visit_keyword(self, node: ast.keyword) -> ast.AST:
+            self.generic_visit(node)
+            if node.arg in {"failures", "warnings"} and isinstance(node.value, ast.List):
+                node.value.elts = [
+                    element
+                    for element in node.value.elts
+                    if not (
+                        isinstance(element, ast.Constant)
+                        and (element.lineno, element.value) in inline
+                    )
+                ]
+            return node
+
+        def _drop_rules(self, node: ast.AST) -> ast.AST:
+            if isinstance(node.value, (ast.Tuple, ast.List)):
+                node.value.elts = [
+                    element
+                    for element in node.value.elts
+                    if not (
+                        isinstance(element, ast.Call)
+                        and element.args
+                        and isinstance(element.args[0], ast.Constant)
+                        and (element.lineno, element.args[0].value) in registry
+                    )
+                ]
+            return node
+
+        def visit_Assign(self, node: ast.Assign) -> ast.AST:
+            self.generic_visit(node)
+            if any(isinstance(t, ast.Name) and t.id == "RULES" for t in node.targets):
+                return self._drop_rules(node)
+            return node
+
+        def visit_AnnAssign(self, node: ast.AnnAssign) -> ast.AST:
+            self.generic_visit(node)
+            if isinstance(node.target, ast.Name) and node.target.id == "RULES":
+                return self._drop_rules(node)
+            return node
+
+    return ast.fix_missing_locations(Drop().visit(tree))
+
+
+def declared_obligations() -> set[str]:
+    """The obligations the verifier itself declares, read from its own registry.
+
+    Empty when the verifier has no registry, which is the pre-refactor shape: the
+    reconciliation below then asserts nothing rather than failing on every tree.
+    """
+    import test_action_receipt_fixtures as reference
+
+    return {rule.code for rule in getattr(reference, "RULES", ())}
+
+
+def reconcile_or_refuse(sites: Sequence[Site]) -> None:
+    """Refuse to report when discovery cannot see the verifier's own inventory.
+
+    Every conclusion these scripts print is a claim about obligations, so it is only
+    as wide as the set of obligations discovery can reach. When that set and the
+    verifier's declared set disagree, the honest output is no output. This tooling
+    found one site against a registry of twenty-two and printed "every obligation is
+    held by at least one vector", which is the same sentence a suite containing no
+    checks at all would produce, and there is no way to tell the two apart from the
+    output. Exit 2, distinct from the exit 1 a real coverage gap earns.
+
+    A verifier with no registry declares no inventory, so there is nothing to
+    reconcile against and this check passes vacuously on such a tree. That is the
+    limit of the guard rather than an oversight: partial blindness is only
+    detectable against a declaration of what should have been found, which is the
+    argument for the registry existing. What is still caught on such a tree is
+    discovery finding nothing at all.
+    """
+    if not sites:
+        print(
+            "\nREFUSING TO REPORT: site discovery found nothing to mutate.\n"
+            "An empty table under a heading that says every obligation is held is\n"
+            "the most confident output this script can produce and the least earned.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    declared = declared_obligations()
+    missing = sorted(declared - {site.code for site in sites})
+    if not missing:
+        return
+    print(
+        f"\nREFUSING TO REPORT: {len(missing)} of {len(declared)} declared obligations "
+        f"are invisible to site discovery.",
+        file=sys.stderr,
+    )
+    for code in missing:
+        print(f"    {code}", file=sys.stderr)
+    print(
+        "\nThe verifier declares these in its RULES registry and discovery found no\n"
+        "mutable site for them. Any coverage conclusion would be drawn over a fraction\n"
+        "of the inventory, so none is printed. Fix discovery first.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
 
 
 def _outcomes(verify: Any) -> list[tuple[str, str, tuple, tuple]]:
@@ -130,32 +279,7 @@ def _outcomes(verify: Any) -> list[tuple[str, str, tuple, tuple]]:
 
 def _run_mutant(site: Site) -> list[tuple[str, str, tuple, tuple]]:
     """Re-execute the verifier with one code-emission site neutralised."""
-    tree = _tree()
-
-    class DropAppend(ast.NodeTransformer):
-        def visit_Expr(self, node: ast.Expr) -> ast.AST:
-            # `pass`, not deletion: a rule that is the sole body of an `if` would leave an
-            # empty block, the mutant would fail to compile, and every vector would
-            # "change" — scoring the rule load-bearing for the wrong reason, uniformly.
-            return ast.copy_location(ast.Pass(), node) if node.lineno == site.lineno else node
-
-    class DropInline(ast.NodeTransformer):
-        def visit_keyword(self, node: ast.keyword) -> ast.AST:
-            self.generic_visit(node)
-            if node.arg in {"failures", "warnings"} and isinstance(node.value, ast.List):
-                node.value.elts = [
-                    element
-                    for element in node.value.elts
-                    if not (
-                        isinstance(element, ast.Constant)
-                        and element.value == site.code
-                        and element.lineno == site.lineno
-                    )
-                ]
-            return node
-
-    transformer = DropAppend() if site.form == "append" else DropInline()
-    mutated = ast.fix_missing_locations(transformer.visit(tree))
+    mutated = drop_sites(_tree(), [site])
 
     # A real, registered module: `@dataclass` resolves sys.modules[cls.__module__], so
     # exec'ing into a bare dict raises before any vector runs — which reads as "every rule
@@ -189,7 +313,9 @@ def main() -> int:
     print(f"vectors:  {len(FIXTURES)}")
     print(f"sites:    {len(sites)} "
           f"({sum(1 for s in sites if s.form == 'append')} append, "
-          f"{sum(1 for s in sites if s.form == 'inline')} inline)")
+          f"{sum(1 for s in sites if s.form == 'inline')} inline, "
+          f"{sum(1 for s in sites if s.form == 'registry')} registry)")
+    reconcile_or_refuse(sites)
     print()
     header = f"{'code':<40} {'form':<7} {'status':>6} {'full':>5} {'attributed':>11}"
     print(header)
