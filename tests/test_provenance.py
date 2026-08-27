@@ -56,6 +56,39 @@ def test_hash_is_stable_and_order_independent() -> None:
     assert tool_catalog_hash(TOOLS) == tool_catalog_hash(list(reversed(TOOLS)))
 
 
+# --- tools is the untrusted party's own claim about itself ------------------
+#
+# check_tool_catalog() passes *tools* through to tool_catalog_hash() unchanged.
+# It is "what the server actually offered you" -- the module's own docstring
+# calls this "the step that catches a live attack" -- so a malformed entry
+# here is not a hypothetical caller mistake, it is the shape a malicious or
+# simply broken server's response takes. t.get(...) on each entry, and
+# iteration over *tools* itself, both assumed a well-formed shape with no
+# check, so either one crashed with AttributeError/TypeError instead of the
+# documented ProvenanceError.
+
+
+@pytest.mark.parametrize("bad_tools", ["not-a-list", None, 42, {"a": 1}])
+def test_non_list_tools_is_refused_not_a_crash(bad_tools) -> None:
+    with pytest.raises(ProvenanceError, match="tools must be a list"):
+        tool_catalog_hash(bad_tools)
+
+
+@pytest.mark.parametrize("bad_entry", ["not-a-dict-tool", None, 42, ["nested", "list"]])
+def test_non_object_tool_entry_is_refused_not_a_crash(bad_entry) -> None:
+    with pytest.raises(ProvenanceError, match=r"tools\[1\] must be an object"):
+        tool_catalog_hash([TOOLS[0], bad_entry])
+
+
+def test_check_tool_catalog_also_refuses_malformed_tools() -> None:
+    """The same crash, reached through the actual security-critical entry
+    point: check_tool_catalog(record, tools), where tools is the server's own
+    response."""
+    signed = sign_record(_record(), generate_key())
+    with pytest.raises(ProvenanceError, match="tools must be a list"):
+        check_tool_catalog(signed, "not-a-list")
+
+
 def test_description_change_changes_the_hash() -> None:
     """The rug-pull this exists to catch.
 
@@ -179,6 +212,77 @@ def test_unknown_format_version_is_rejected_not_parsed() -> None:
 
 def test_format_constant_matches_the_spec() -> None:
     assert FORMAT == "agentrust-io/mcp-server-provenance/1"
+
+
+# malformed records fail closed with ProvenanceError, not a crash
+#
+# `record.get(field) or {}` looks like it defaults a missing block to `{}`, but
+# a present, truthy, non-dict value (a string, a list, a number, `True`) is not
+# caught by the `or`, and the first `.get()` call on it raised an unhandled
+# `AttributeError`. verify_record's docstring promises `ProvenanceError` for
+# "every other rejection"; a caller that only catches ProvenanceError, exactly
+# as documented, would not catch that, and an adversarial record could crash
+# the caller's verification path instead of being rejected by it.
+
+
+def _signed(record):
+    key = generate_key()
+    signed = sign_record(record, key)
+    return signed, key_to_jwk(key)
+
+
+def test_non_object_identity_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "identity": "not-an-object"})
+    with pytest.raises(ProvenanceError, match="identity must be an object"):
+        verify_record(record, jwk)
+
+
+def test_non_object_identity_artifact_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "identity": {"artifact": "not-an-object"}})
+    with pytest.raises(ProvenanceError, match="identity.artifact must be an object"):
+        verify_record(record, jwk)
+
+
+def test_non_object_identity_endpoint_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "identity": {"endpoint": 12345}})
+    with pytest.raises(ProvenanceError, match="identity.endpoint must be an object"):
+        verify_record(record, jwk)
+
+
+def test_non_object_tool_catalog_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "tool_catalog": ["not", "an", "object"]})
+    with pytest.raises(ProvenanceError, match="tool_catalog must be an object"):
+        verify_record(record, jwk)
+
+
+def test_null_identity_and_tool_catalog_still_behave_like_absent() -> None:
+    """`None` is not malformed -- it is how JSON spells an absent block, and the
+    "identifies nothing" / digest-format errors below it are the right rejection,
+    not a type error."""
+    record, jwk = _signed({**_record(), "identity": None})
+    with pytest.raises(ProvenanceError, match="neither an artifact nor an endpoint"):
+        verify_record(record, jwk)
+
+    record, jwk = _signed({**_record(), "tool_catalog": None})
+    with pytest.raises(ProvenanceError, match="not a sha256"):
+        verify_record(record, jwk)
+
+
+def test_check_tool_catalog_also_refuses_a_non_object_tool_catalog() -> None:
+    """The same crash existed a second time: check_tool_catalog() is callable on
+    its own, independent of verify_record(), and read tool_catalog with the same
+    unguarded `(record.get(...) or {}).get(...)` pattern."""
+    signed, _ = _signed({**_record(), "tool_catalog": "not-an-object"})
+    with pytest.raises(ProvenanceError, match="tool_catalog must be an object"):
+        check_tool_catalog(signed, TOOLS)
+
+
+def test_check_tool_catalog_null_tool_catalog_still_behaves_like_absent() -> None:
+    """Control test, mirroring the one above: a genuinely absent tool_catalog is
+    a mismatch (there is nothing to match against), not a type error."""
+    signed, _ = _signed({**_record(), "tool_catalog": None})
+    with pytest.raises(ToolCatalogMismatch, match="about the server, not the document"):
+        check_tool_catalog(signed, TOOLS)
 
 
 # --- the step that catches a live attack -----------------------------------

@@ -3,13 +3,13 @@
 The verifier consumes an explicit registry of named rules (``RULES``) rather than
 emitting failure codes inline. The registry is the inventory: every obligation this
 verifier enforces is one ``Rule`` entry, and the completeness suite in
-`test_vector_completeness.py` mutates registry entries by name — removing or weakening
-one hook at a time — to prove each rule is load-bearing for at least two independent
+`test_vector_completeness.py` mutates registry entries by name: removing or weakening
+one hook at a time: to prove each rule is load-bearing for at least two independent
 fixtures.
 
 That shape is deliberate, and it is the review outcome of upstream #124: an earlier
 revision recovered the rule inventory from this module's source by AST-walking for
-string literals appended to failure lists. The review's objection stands — ``append``
+string literals appended to failure lists. The review's objection stands: ``append``
 vs ``extend``, constants, f-strings and refactors all create silent blind spots in a
 source-derived inventory. A registry the verifier itself consumes turns "add a rule
 without adding it to the inventory" from heuristically detectable into structurally
@@ -125,7 +125,7 @@ def _signature_invalid(signed: dict[str, Any], trusted_jwk: dict[str, str]) -> b
 @dataclass(frozen=True)
 class Rule:
     """One named obligation. ``check`` returns True when the defect it guards against
-    is observed in the fixture — i.e. True means the code is emitted."""
+    is observed in the fixture: i.e. True means the code is emitted."""
 
     code: str
     severity: str  # "failure" | "warning"
@@ -245,13 +245,13 @@ def _disclosure_not_sealed_by_successor(f: dict[str, Any]) -> bool:
 
 
 def _disclosure_not_yet_sealed(f: dict[str, Any]) -> bool:
-    # At the live tail of the chain — after the crash, before resumption — no
+    # At the live tail of the chain, after the crash, before resumption, no
     # successor exists, so the seal cannot be checked. That is an inability to
     # check, not a defect (the same section 3.3.1 logic as an unpinned key), so it
     # is an advisory: the disclosure accuses no one, and confers nothing until the
     # chain resumes and the seal becomes checkable. Without this rule an unsealed
     # tail disclosure verified as fully disclosed, while the draft text says a
-    # disclosure not linked from both directions covers nothing — and an adversary
+    # disclosure not linked from both directions covers nothing: and an adversary
     # could reach that state at will by truncating the chain after the disclosure.
     return not f["context"]["chain"]["successor_present"]
 
@@ -360,7 +360,7 @@ def _verify_gap_disclosure(fixture: dict[str, Any], rules: Sequence[Rule]) -> Re
         # No positive defect, but something the verifier could not check: a signature
         # under an unpinned key, or a seal whose successor does not exist yet. The
         # disclosure confers nothing and proves nothing. It does not count as a
-        # properly disclosed gap — that status requires a signature the verifier
+        # properly disclosed gap: that status requires a signature the verifier
         # actually checked *and* a splice sealed from both directions. A tail
         # disclosure upgrades on re-verification once the chain has resumed.
         return ReceiptResult(
@@ -500,7 +500,7 @@ def test_fixture_set_is_complete() -> None:
         "16-decision-not-in-enum.json",
         # 17-30 are the second vector for every receipt rule (#124: two independent
         # vectors each), placed against implementation shortcuts the first set
-        # cannot detect — prefix-true digests, case-variant identifiers, one-second
+        # cannot detect: prefix-true digests, case-variant identifiers, one-second
         # boundaries, structural-but-wrong signatures, an explicit-null receipt.
         "17-missing-receipt-explicit-null.json",
         "18-action-ref-tail-forged.json",
@@ -535,7 +535,7 @@ def test_fixture_set_is_complete() -> None:
         "proposal-117/15-gap-disclosure-seal-tail-mismatch.json",
         "proposal-117/16-gap-disclosure-contradicted-at-tail.json",
         # proposal-117/17-18: disclosure_not_yet_sealed, found by reviewing our own
-        # tree against the draft text — an unsealed tail disclosure verified as fully
+        # tree against the draft text: an unsealed tail disclosure verified as fully
         # disclosed while the draft says half a splice covers nothing. Unverified,
         # not invalid: absence of a successor is an inability to check (§3.3.1).
         "proposal-117/17-gap-disclosure-at-unsealed-tail.json",

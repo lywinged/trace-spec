@@ -2,7 +2,7 @@
 
 The other modules ask whether the vectors are *correct*. This one asks whether they are
 *complete*: does every obligation the verifier implements have vectors that notice when
-the obligation is gone — and notice it from more than one direction?
+the obligation is gone: and notice it from more than one direction?
 
 The rule inventory is ``RULES``, the registry the verifier itself consumes. An earlier
 revision recovered the inventory from the verifier's source with ``ast``, and upstream
@@ -14,7 +14,7 @@ cannot silently exist outside the inventory; and ``test_no_emission_outside_the_
 is the residual guard for code that would try to emit around the registry.
 
 Mutation therefore targets **named rule hooks**: a rule is deleted by rebuilding the
-registry without its entry, or weakened by substituting its check — never by pattern-
+registry without its entry, or weakened by substituting its check: never by pattern-
 matching source text. Same review, same reason: mutate what the verifier actually
 consumes, so the mutation cannot drift away from the code under test.
 
@@ -23,9 +23,9 @@ The questions, in increasing strength:
 1. Does any fixture expect a code the registry cannot produce? (dead expectations)
 2. Is every registered rule exercised by some fixture? (unexercised rules)
 3. Does deleting each rule change at least **two** fixtures' outcomes? (#124: single-
-   vector coverage has no margin — one fixture weakened or renamed away silently
+   vector coverage has no margin: one fixture weakened or renamed away silently
    removes a rule's coverage)
-4. Are two of those fixtures **independent** — is there a single plausible
+4. Are two of those fixtures **independent**: is there a single plausible
    implementation defect that one catches and the other misses? Two copies of the same
    vector satisfy question 3 and fail this one.
 5. Has any rule's margin dropped below what it was? (silent thinning)
@@ -86,7 +86,7 @@ def _hash_prefix(value: str) -> str:
 
 
 def _ci_lookup(fixture: dict[str, Any], signed: dict[str, Any]) -> dict[str, str] | None:
-    """A key lookup that normalises case — the classic 'be liberal' shortcut."""
+    """A key lookup that normalises case: the classic 'be liberal' shortcut."""
     wanted = signed["issuer_key_id"].lower()
     for key_id, jwk in fixture["trusted_issuer_keys"].items():
         if key_id.lower() == wanted:
@@ -112,7 +112,7 @@ DEFECTS: dict[str, dict[str, Check]] = {
     "receipt_missing": {
         "treats_explicit_null_as_present": lambda f: "receipt" not in f,
     },
-    # Digest comparisons shortened to a prefix — log-friendly truncation that leaks
+    # Digest comparisons shortened to a prefix: log-friendly truncation that leaks
     # into the comparison.
     "action_ref_invalid": {
         "compares_truncated_digest": lambda f: _hash_prefix(_recomputed_action_ref(f))
@@ -210,7 +210,7 @@ DEFECTS: dict[str, dict[str, Check]] = {
     },
     # A sealed-ness test read off the wrong field: "is there a successor link value"
     # instead of "is there a successor". The same family as receipt_missing's
-    # null-vs-absent defect — deriving a state from a field's presence.
+    # null-vs-absent defect: deriving a state from a field's presence.
     "disclosure_not_yet_sealed": {
         "reads_link_field_not_successor": lambda f: f["context"]["chain"][
             "successor_previous_receipt_hash"
@@ -311,7 +311,7 @@ def test_no_emission_outside_the_registry() -> None:
     The registry is the inventory *because* `_evaluate` is the only place a code is
     emitted. This walks the verifier's source and fails on: an append to a failure or
     warning collection anywhere else, or a literal code smuggled into a result's
-    `failures=`/`warnings=` argument. One literal is allowed by name —
+    `failures=`/`warnings=` argument. One literal is allowed by name,
     `receipt_gap_disclosed`, the advisory that echoes the status on the valid
     disclosure path; it states an outcome rather than enforcing an obligation, which
     is why it is not a rule.
@@ -360,7 +360,7 @@ def test_no_emission_outside_the_registry() -> None:
 def test_registry_codes_are_literals() -> None:
     """Every `Rule(...)` names its code as a string literal.
 
-    Not needed at runtime — the imported registry is the ground truth either way —
+    Not needed at runtime, the imported registry is the ground truth either way,
     but a computed code would make the registry unreadable in review, and reviewability
     is half of what the registry is for.
     """
@@ -398,7 +398,7 @@ def test_no_fixture_expects_a_code_the_registry_cannot_emit() -> None:
     orphans = _codes_expected_by_fixtures() - set(RULE_CODES) - {"receipt_gap_disclosed"}
     assert not orphans, (
         f"fixtures expect codes no registered rule produces: {sorted(orphans)}. "
-        "Either the rule was removed and the fixture kept, or the code is misspelled — "
+        "Either the rule was removed and the fixture kept, or the code is misspelled: "
         "in both cases the fixture is no longer testing anything."
     )
 
@@ -432,7 +432,7 @@ def test_each_rule_is_load_bearing_for_two_fixtures(code: str) -> None:
     """Deleting an obligation must change at least two fixtures' outcomes.
 
     One is existence; two is margin. With a single load-bearing vector, any change
-    that weakens or retires that vector silently removes the rule's coverage — the
+    that weakens or retires that vector silently removes the rule's coverage: the
     failure mode #124 exists to close. A rule here has margin two only if both
     vectors independently notice its deletion, so a vector that merely *names* the
     rule while another rule fires on its input does not count.
@@ -449,7 +449,7 @@ def test_every_rule_declares_a_defect() -> None:
     """Fail closed: registering a rule requires declaring what its second vector adds.
 
     A rule with no weakened variant cannot demonstrate that its vectors are
-    independent rather than copies, so the declaration is part of adding the rule —
+    independent rather than copies, so the declaration is part of adding the rule:
     the mirror of the registry requirement on the verifier side.
     """
     missing = sorted(set(RULE_CODES) - set(DEFECTS))
@@ -482,7 +482,7 @@ def test_vectors_for_each_rule_are_independent(code: str) -> None:
     assert separations, (
         f"no declared defect separates the vectors for {code!r}: every weakening "
         f"either fools all of {sorted(bearing)} or none of them. The vectors are "
-        "mutually redundant — author one that catches a defect the others miss, or "
+        "mutually redundant: author one that catches a defect the others miss, or "
         "declare a defect that tells them apart."
     )
 
@@ -495,8 +495,8 @@ def test_vectors_for_each_rule_are_independent(code: str) -> None:
 def test_margins_have_not_thinned() -> None:
     """A ratchet above the floor: coverage may not silently get thinner.
 
-    The floor is two. Anything above it that exists today — a rule three or four
-    fixtures notice — may not quietly decay back toward the floor: lowering a
+    The floor is two. Anything above it that exists today: a rule three or four
+    fixtures notice: may not quietly decay back toward the floor: lowering a
     recorded margin is a decision someone has to make on purpose, in the same commit,
     with a reason. Raising one is an ordinary PR.
     """

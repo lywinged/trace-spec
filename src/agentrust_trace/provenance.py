@@ -57,6 +57,15 @@ class ProvenanceError(ValueError):
     """A provenance record is malformed, unsigned, or signed by the wrong key."""
 
 
+def _as_object(value: Any, field: str) -> dict[str, Any]:
+    """Return *value* as a dict, or raise ``ProvenanceError`` naming *field*."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ProvenanceError(f"{field} must be an object, got {type(value).__name__}")
+    return value
+
+
 class ToolCatalogMismatch(ProvenanceError):
     """The server offered a tool set the record does not describe.
 
@@ -79,7 +88,19 @@ def tool_catalog_hash(tools: list[dict[str, Any]]) -> str:
     Output schemas, annotations and vendor extensions are excluded. They change
     for reasons that are not security-relevant, and a hash that churns is a hash
     nobody compares.
+
+    Raises :class:`ProvenanceError` if *tools* is not a list, or contains
+    anything other than an object. This is the input :func:`check_tool_catalog`
+    passes through unchanged from whatever the server just returned -- the
+    untrusted party that function exists to check -- so a malformed entry here
+    is not a hypothetical, it is the shape a live attack, or simply a broken
+    server, takes.
     """
+    if not isinstance(tools, list):
+        raise ProvenanceError(f"tools must be a list, got {type(tools).__name__}")
+    for index, t in enumerate(tools):
+        if not isinstance(t, dict):
+            raise ProvenanceError(f"tools[{index}] must be an object, got {type(t).__name__}")
     normalized = sorted(
         (
             {
@@ -120,6 +141,10 @@ def _check_structure(
     matters is the one on the consumer side.
     """
     if artifact is not None:
+        if not isinstance(artifact, dict):
+            raise ProvenanceError(
+                f"identity.artifact must be an object, got {type(artifact).__name__}"
+            )
         if not artifact.get("package"):
             raise ProvenanceError("artifact.package is required (a Package URL)")
         if not _DIGEST_RE.match(str(artifact.get("digest", ""))):
@@ -129,6 +154,10 @@ def _check_structure(
                 "server on a host shares one interpreter digest."
             )
     if endpoint is not None:
+        if not isinstance(endpoint, dict):
+            raise ProvenanceError(
+                f"identity.endpoint must be an object, got {type(endpoint).__name__}"
+            )
         if not endpoint.get("url"):
             raise ProvenanceError("endpoint.url is required when endpoint is present")
         if not _DIGEST_RE.match(str(endpoint.get("spki_sha256", ""))):
@@ -262,7 +291,7 @@ def verify_record(
     ``None``, unlike the 86400 of a Trust Record, because a provenance record
     describes an artifact by immutable digest and those are conventionally valid
     indefinitely. A record carrying ``endpoint`` identity is the case where that
-    reasoning does not hold — a URL and an SPKI digest decay — so a consumer
+    reasoning does not hold, a URL and an SPKI digest decay, so a consumer
     relying on ``endpoint`` should pass a bound.
 
     ``max_future_skew_seconds`` (default 300) is enforced whether or not an age
@@ -284,7 +313,7 @@ def verify_record(
         raise ProvenanceError(f"unknown kind {record.get('kind')!r}")
     if not _PUBLISHER_RE.match(str(record.get("publisher", ""))):
         raise ProvenanceError("publisher must be a DID or SPIFFE URI")
-    identity = record.get("identity") or {}
+    identity = _as_object(record.get("identity"), "identity")
     if not identity.get("artifact") and not identity.get("endpoint"):
         raise ProvenanceError("identity carries neither an artifact nor an endpoint")
     _check_structure(
@@ -294,7 +323,7 @@ def verify_record(
         attestation=record.get("attestation"),
         issued_at=record.get("issued_at"),
     )
-    catalog = record.get("tool_catalog") or {}
+    catalog = _as_object(record.get("tool_catalog"), "tool_catalog")
     if not _DIGEST_RE.match(str(catalog.get("hash", ""))):
         raise ProvenanceError("tool_catalog.hash is not a sha256: digest")
 
@@ -368,11 +397,17 @@ def check_tool_catalog(record: dict[str, Any], tools: list[dict[str, Any]]) -> N
     needs something ``verify_record`` does not have: what the server said to
     *you*. A verifier that never obtains that has checked a document against
     itself.
+
+    Raises :class:`ToolCatalogMismatch` on a mismatch, and :class:`ProvenanceError`
+    if ``record["tool_catalog"]`` is present but is not an object -- the same
+    contract :func:`verify_record` makes, since this can run against a record
+    ``verify_record`` has not (yet) seen.
     """
     actual = tool_catalog_hash(tools)
-    expected = (record.get("tool_catalog") or {}).get("hash")
+    catalog = _as_object(record.get("tool_catalog"), "tool_catalog")
+    expected = catalog.get("hash")
     if actual != expected:
-        declared_count = (record.get("tool_catalog") or {}).get("tool_count")
+        declared_count = catalog.get("tool_count")
         raise ToolCatalogMismatch(
             f"the server offered a tool set this record does not describe: computed "
             f"{actual}, record says {expected} "

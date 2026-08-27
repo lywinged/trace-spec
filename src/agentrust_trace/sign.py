@@ -58,7 +58,7 @@ class VerificationStatement:
 
     key_source: str
     """``"trusted"`` for a caller-supplied key, ``"embedded"`` for ``cnf.jwk`` under
-    ``allow_embedded_key=True`` — which proves internal consistency, not authenticity."""
+    ``allow_embedded_key=True``: which proves internal consistency, not authenticity."""
 
     freshness_checked: bool
     """Whether ``iat`` was bounded by ``max_age_seconds``."""
@@ -392,7 +392,7 @@ def verify_record(
         "the signature checks out" says nothing about whether this code implements
         the semantics the record was written under. `spec/trace-v0.2.md` requires
         exactly this of a v0.2 verifier, and forbids accepting the v0.1 identifier
-        alongside it — passing a set containing ``TRACE_PROFILE_V0_1`` raises
+        alongside it: passing a set containing ``TRACE_PROFILE_V0_1`` raises
         ``ValueError`` before any record is examined, so the dual-accepting verifier
         the cutover forbids cannot be configured here at all. Declared downgrade to
         other, legitimately owned older profiles remains representable.
@@ -404,7 +404,7 @@ def verify_record(
     Trust anchoring (fail closed):
         Without a trusted key, the record cannot vouch for itself, so verification
         is refused. Set ``allow_embedded_key=True`` to opt in to verifying against
-        ``record["cnf"]["jwk"]`` — this only proves internal consistency, not
+        ``record["cnf"]["jwk"]``: this only proves internal consistency, not
         authenticity, and emits a loud ``UserWarning``.
 
     Freshness (fail closed):
@@ -488,7 +488,7 @@ def verify_record(
             raise ValueError(
                 f"record carries the superseded v0.1 profile {profile!r}. "
                 "spec/trace-v0.2.md section 2: the cutover is cutover, not "
-                "coexistence — a v0.2 verifier rejects the v0.1 identifier, which "
+                "coexistence: a v0.2 verifier rejects the v0.1 identifier, which "
                 "was minted under a domain the project does not own."
             )
         raise ValueError(
