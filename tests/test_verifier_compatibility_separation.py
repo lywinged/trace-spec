@@ -5,9 +5,12 @@ it. Nothing in the set's own tests checks that claim: they run *this* verifier a
 compare verdicts, so they pass whether or not any other implementation could pass too.
 
 Measured against a verifier implementing none of the four obligations in
-agentrust-io/trace-spec#116, the set separates 3 of its 8 vectors. Five refusal
-vectors separate nothing, and the reason is structural rather than a flaw in how they
-were written:
+agentrust-io/trace-spec#116, the set separates 5 of its 11 vectors. The figure lives
+in one place, next to `SEPARATING` below, and this paragraph names it only because a
+reader arrives here first: it read `3 of 8` for as long as it took someone to notice,
+which is the drift this module exists to prevent, happening to the module's own
+headline number. Six refusal vectors separate nothing, and the reason is structural
+rather than a flaw in how they were written:
 
 `schema/trace-claim.json` pins `eat_profile` with a `const`, so a record carrying any
 other profile is schema-invalid. Since upstream #156 made `verify_record` validate
@@ -70,22 +73,28 @@ def _separates(vector: dict) -> bool:
     return expected.get("statement") is not None and statement is None
 
 
-# Recorded, not asserted as a threshold. The honest figure is 4 of 9 and a test that
+# Recorded, not asserted as a threshold. The honest figure is 5 of 11 and a test that
 # demanded more would be failing on a truth rather than on a regression. Adding a
 # separating vector fails this and the entry is updated; losing one fails it too.
 #
-# It was 3 of 8. What moved is instructive and is the reason this file exists: the
-# five refusal vectors that separate nothing do so because the schema pins
+# It was 3 of 8, then 4 of 9. What moved is instructive and is the reason this file
+# exists: the refusal vectors that separate nothing do so because the schema pins
 # `eat_profile` with a `const`, so their records are refused by the schema whether or
-# not a verifier implements any profile rule at all. The two that were added separate
+# not a verifier implements any profile rule at all. The ones that were added separate
 # precisely because their records are innocent v0.2 records and the only defect is in
 # the verifier's declared configuration, which no schema can catch. A vector aimed at
 # a configuration rule has to carry a record with nothing wrong with it.
+#
+# That rule is what 10 was written to, and it is why 10 separates where 08 does not
+# although both pin the same boundary: 08 presents a v0.1 record, which the schema
+# refuses on its own, and 10 presents an ordinary v0.2 record so the only thing wrong
+# is the verifier's own accepted set.
 SEPARATING = frozenset({
     "01-known-version-verified",              # requires a statement naming the profile
     "04-unschemaed-profile-refused",          # a declared profile with no schema, last
     "06-empty-accepted-set-refused",          # the record is valid; only the config is wrong
     "09-unschemaed-profile-first-in-set-refused",  # the same defect, first in the set
+    "10-superseded-first-in-set-innocent-record-refused",  # v0.1 first, record innocent
 })
 
 
