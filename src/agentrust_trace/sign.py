@@ -176,6 +176,12 @@ def jwk_thumbprint(jwk: dict[str, Any]) -> str:
 
     Raises ``ValueError`` for an unknown ``kty`` or a missing required member.
     """
+    if not isinstance(jwk, dict):
+        raise ValueError(
+            f"jwk must be a JSON object, got {type(jwk).__name__}. A JWK reaches this "
+            "function from a peer, a key document or a record's own `cnf`, so its shape "
+            "is not something the caller has already established."
+        )
     kty = jwk.get("kty")
     if not isinstance(kty, str) or kty not in _THUMBPRINT_MEMBERS:
         raise ValueError(
@@ -459,6 +465,15 @@ def verify_record(
             "a profile whose shape cannot be checked is a claim this verifier cannot "
             "make: a valid signature over semantics this build does not implement is "
             "not evidence."
+        )
+    if not isinstance(record, dict):
+        raise ValueError(
+            f"record must be a JSON object, got {type(record).__name__}. A Trust Record "
+            "is always an object, and what a verifier is handed is by definition not yet "
+            "trusted to be one: `json.loads` of an untrusted body returns a list, a "
+            "string, a number or None just as readily as a dict. Refusing here keeps "
+            "that case on the ValueError path this function documents, instead of "
+            "raising AttributeError straight past a caller's `except ValueError`."
         )
     profile = record.get("eat_profile")
     if not isinstance(profile, str) or not profile:
