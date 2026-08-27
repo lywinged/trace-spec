@@ -1,4 +1,4 @@
-# Conformance-vector completeness in `trace-spec` — a measurement report
+# Conformance-vector completeness in `trace-spec`: a measurement report
 
 **Subject:** `agentrust-io/trace-spec` @ `8dc4197`
 **Measured:** 2026-08-06 · Python 3.11.15, clean venv
@@ -13,11 +13,11 @@ from this repository and the scripts in [`scripts/`](scripts/); §7 gives the co
 ## Summary for someone who will read one paragraph
 
 `trace-spec`'s action-receipt conformance vectors are **complete under a criterion stronger
-than the usual one**: for all twenty-one obligations the reference verifier enforces,
+than the usual one**, for all twenty-one obligations the reference verifier enforces,
 deleting the obligation changes at least one published vector's outcome, and in every case
 one of the vectors that changes is a vector that **names** that rule. No obligation is masked
-by any other. Two independent checks that could have found problems — a differential against
-a second, independently written RFC 8785 canonicalizer, and a rule-inventory guard — found
+by any other. Two independent checks that could have found problems: a differential against
+a second, independently written RFC 8785 canonicalizer, and a rule-inventory guard: found
 none.
 
 That is a better result than any of seven external conformance corpora measured with the
@@ -32,12 +32,12 @@ to incomplete in a single step, and nothing in CI would say so.
 
 An obligation is **load-bearing** for a corpus when deleting it from the reference verifier
 changes the outcome of at least one published vector. This is stronger than the usual
-question — *does some vector name this rule?* — because a vector can name a rule it does not
+question, *does some vector name this rule?*, because a vector can name a rule it does not
 exercise, and a rule can be enforced twice over so that removing one copy changes nothing.
 
 The criterion's shape is **not new**. Coverage-by-mutation has been the answer to *does this
 specification actually constrain that system?* in formal verification since the late 1990s
-(Hoskote et al., DAC 1999; Chockler, Kupferman and Vardi, 2001–2006), and mutation analysis
+(Hoskote et al., DAC 1999; Chockler, Kupferman and Vardi, 2001-2006), and mutation analysis
 of test suites goes back to DeMillo, Lipton and Sayward in 1978. What is being done here is
 applying it to a **published conformance vector set**, where a surviving mutant means
 something different in kind: not *this suite would miss a bug*, but **a certified
@@ -51,7 +51,7 @@ Three things were computed for each obligation:
 | **attribution** | whether the vector that *names* the rule is among those that change |
 | **masking** | whether deleting some other obligation first makes this one free |
 
-The oracle compares the **full outcome** — `(status, failures, warnings)` — not status alone.
+The oracle compares the **full outcome** of `(status, failures, warnings)`, not status alone.
 That choice is not cosmetic; §3 explains what it changes.
 
 ## 2. Result
@@ -81,13 +81,13 @@ Set beside seven external corpora measured with the same instrument:
 | Unicode UTS46 × `idna` | 26 | 19 | 52 |
 | RFC 6570 URI Templates × `uritemplate` | 12 | 7 | 11 |
 | RFC 6902 JSON Patch × `jsonpatch` | 19 | **5** | 2 |
-| WHATWG URL × `whatwg-url` | 31 | **0** | — |
+| WHATWG URL × `whatwg-url` | 31 | **0** | - |
 | CDI TCK × Weld (spec-tier) | 166 | 74 | 2 |
 
 `trace-spec` is the only subject in the set with **no gap at all**. Several of the others are
 mature, widely-implemented standards: the published RFC 6902 corpus leaves fourteen of
 nineteen obligations unenforced, and the WHATWG URL conformance corpus enforces **none** of
-that specification's thirty-one normatively named validation errors — structurally, because
+that specification's thirty-one normatively named validation errors: structurally, because
 those errors are non-fatal by definition and the corpus asserts only the parse result.
 
 ## 3. Three things this measurement changed about the criterion itself
@@ -113,7 +113,7 @@ coarse comparison showing through as a false constraint.
 *Measured again after the registry refactor; the finding stands and its subject changed.*
 
 As first measured, the audited load-bearing test was parametrized over `append` sites only,
-and two codes — `receipt_gap_disclosed` and `receipt_missing` — were emitted through **inline
+and two codes, `receipt_gap_disclosed` and `receipt_missing`, were emitted through **inline
 literal lists on early returns**, so they were checked for *named* coverage and never mutated.
 Both were load-bearing. No harm was done. But they were outside the criterion for reasons of
 code shape rather than of principle, and the inventory guard found them by counting what it
@@ -145,7 +145,7 @@ early-return outcomes testable at all.
 
 `trace-spec`'s fixture documentation argues that the signatures are protected against a
 defect in the canonicalizer, because two paths verify them. Both paths called `rfc8785`.
-**The claim was unsupported as written** — a shared-canonicalizer defect would have been
+**The claim was unsupported as written**: a shared-canonicalizer defect would have been
 invisible to both.
 
 It is now supported. [`scripts/jcs_minimal.py`](scripts/jcs_minimal.py) is a second RFC 8785
@@ -167,7 +167,7 @@ two different facts and only the second was ever in doubt.
 Worth noting what the differential covers that the signature check does not: all 416 JSON
 values in the corpus, not only the ~30 signed bodies. Canonicalization defects live in the
 shape of the data. The one string containing a non-ASCII character (an em dash, U+2014)
-exercises the rule that JCS emits UTF-8 literally — a serializer that escapes it produces
+exercises the rule that JCS emits UTF-8 literally: a serializer that escapes it produces
 valid JSON that is not canonical, and every signature over it would fail against a correct
 implementation.
 
@@ -182,7 +182,7 @@ margin distribution, full outcome:   1 → 20 obligations
 
 **Twenty of twenty-one obligations were held by exactly one vector.** The suite was complete
 and maximally fragile. Compare the mature corpora, where the `type` keyword in the JSON Schema
-Test Suite is held by 151 independent cases and the UTS46 median is 52 — depth that arrives
+Test Suite is held by 151 independent cases and the UTS46 median is 52: depth that arrives
 from many independent implementers each finding a different way to be wrong.
 
 *Measured again, after a second vector was written for every obligation:*
@@ -208,15 +208,15 @@ Concretely, three ordinary events move this repository from complete to incomple
 **none of them would fail CI**:
 
 1. A new rule is added with no vector. The load-bearing test is parametrized over the rules
-   it finds, so a rule with no vector fails it — **provided the rule is written in a shape the
+   it finds, so a rule with no vector fails it: **provided the rule is written in a shape the
    inventory recognises.** Written as `extend`, `+=`, an f-string, a named constant, or as an
    entry in a registry the discovery does not read, it joins the suite invisibly, and the
    suite then reports complete coverage of a rule set that no longer includes it. This is the
    one that happened.
 2. A vector is deleted or edited during unrelated work. Nothing warns that it was the only
    thing holding an obligation.
-3. Two rules are written that both reject the same input. Neither becomes free today —
-   masking was swept to rank three and found nothing — but redundancy is what produces
+3. Two rules are written that both reject the same input. Neither becomes free today:
+   masking was swept to rank three and found nothing, but redundancy is what produces
    masking later, and it is invisible until it is measured.
 
 Failure mode 1 is not hypothetical. In the course of building the instrument used for this
@@ -240,7 +240,7 @@ shapes. Each time the count looked plausible. Each time a guard, not a reviewer,
   turns "complete" into "complete, and here is how thin". Consider a *ratchet* rather than a
   threshold: fail when an obligation's margin drops below what it was, since a young suite
   legitimately sits at 1.
-- **Add a second vector for the obligations whose failure would be most expensive** —
+- **Add a second vector for the obligations whose failure would be most expensive**:
   signature validity, chain continuity, freshness. Not for coverage, which is already
   complete, but for margin.
 - Re-run `scripts/pair_mutation.py` when the rule count grows. Rank two is cheap (253 pairs,
@@ -250,7 +250,7 @@ shapes. Each time the count looked plausible. Each time a guard, not a reviewer,
 
 - **The verifier is not the specification.** Everything here measures the vectors against the
   *reference implementation's* obligations. A requirement the specification states and the
-  verifier does not implement is invisible to this method — it is not a rule, so there is
+  verifier does not implement is invisible to this method: it is not a rule, so there is
   nothing to delete. RFC 6570 demonstrated the cost of that blind spot: `uritemplate`
   implements no rejection rules at all, and therefore scored *perfectly* on rejection
   coverage while rejecting nothing.
@@ -278,12 +278,12 @@ python triple_mutation.py     /path/to/trace-spec   # §5  rank three
 Each exits non-zero on a finding.
 
 The comparison figures in §2 for the seven external corpora come from a broader measurement
-study, not from these scripts. They are reported here only for scale; nothing in §§1–7 about
+study, not from these scripts. They are reported here only for scale; nothing in §§1-7 about
 `trace-spec` depends on them.
 
 ---
 
-## Appendix — the full obligation table
+## Appendix: the full obligation table
 
 ```
 code                                     form    status  full  attributed
@@ -318,5 +318,5 @@ warnings)`. The three rows where they differ are §3.3.
 
 ## Licence
 
-Prose: **CC BY 4.0** — <https://creativecommons.org/licenses/by/4.0/legalcode>
-Code under `scripts/`: **Apache 2.0** — full text in [`LICENSE`](LICENSE).
+Prose: **CC BY 4.0**: <https://creativecommons.org/licenses/by/4.0/legalcode>
+Code under `scripts/`: **Apache 2.0**: full text in [`LICENSE`](LICENSE).

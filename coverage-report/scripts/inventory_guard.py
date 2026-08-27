@@ -1,6 +1,6 @@
 """Close section 6.4(b): fail loudly on any rule the inventory would silently miss.
 
-The audited inventory recovers rules by matching exactly one shape —
+The audited inventory recovers rules by matching exactly one shape:
 `failures.append("string-literal")` with a single constant argument. That is drift-proof
 against *forgetting to update a list*, which is the failure it was designed for. It is not
 drift-proof against *writing the rule differently*: `failures.extend([...])`,
@@ -13,7 +13,7 @@ plausible size, which catches the AST walk collapsing entirely, not the loss of 
 out of nineteen.
 
 So this module inverts the question. Instead of asking *what can the inventory recognise?*
-it asks *is there anything here the inventory cannot recognise?* — and treats any such
+it asks *is there anything here the inventory cannot recognise?*, and treats any such
 thing as a failure demanding either the canonical idiom or an explicit declaration. That
 converts an unrecognised rule from a silent omission into a red run, which is the design
 principle of the source-recovered inventory applied consistently to itself.
@@ -121,7 +121,7 @@ def scan(path: Path) -> tuple[list[Finding], int, int]:
         # (4) Inline literal lists on early returns: `failures=[...]` / `warnings=[...]`.
         #     These *are* recovered for named coverage, and are never mutated, because the
         #     load-bearing test is parametrized over append-sites only. Counted, not
-        #     failed — see the note this script prints.
+        #     failed: see the note this script prints.
         if isinstance(node, ast.keyword) and node.arg in RULE_COLLECTIONS:
             if isinstance(node.value, ast.List):
                 inline_codes += sum(

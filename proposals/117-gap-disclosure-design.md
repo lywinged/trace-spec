@@ -16,13 +16,13 @@ issue, and the contradiction is argued below rather than smoothed over.
 
 ---
 
-## 1 and 2. Chain binding and coverage — these are the same question
+## 1 and 2. Chain binding and coverage: these are the same question
 
 The issue asks for these separately. They collapse, and seeing why resolves both.
 
 ### The issue's own argument rules out sequence numbers
 
-> Gap boundaries MUST be expressed in chain/log order, not timestamps — a key that signs
+> Gap boundaries MUST be expressed in chain/log order, not timestamps: a key that signs
 > receipts also signs its own timestamps, so self-reported time cannot bound a gap.
 
 That reasoning is right, and it does not stop at timestamps. **A self-asserted sequence
@@ -101,7 +101,7 @@ It carries no `disclosed_at`, no `range_end_before`, and no separate
 to the disclosure, which is what "sealed at the resumption point" means once it is made
 checkable.
 
-## 3. Issuer binding — anchor on the last present receipt
+## 3. Issuer binding: anchor on the last present receipt
 
 The issue requires the disclosure to be signed by "the receipt-issuing key or its
 hierarchical parent". The verifier has to know which key that is, and the receipts that
@@ -113,8 +113,8 @@ signed by the key that signed the receipt it links back to**, or by that key's p
 the hierarchy of §3.2.1 (record-signing key → workload attestation key → platform
 attestation key → silicon root).
 
-The last receipt before the gap is present by construction — it is the one whose hash the
-disclosure names — so its `issuer_key_id` is readable. No external context is needed, and
+The last receipt before the gap is present by construction: it is the one whose hash the
+disclosure names, so its `issuer_key_id` is readable. No external context is needed, and
 an emitter cannot introduce a new key at a gap boundary, which is precisely the moment it
 would be most convenient to do so.
 
@@ -122,7 +122,7 @@ The parent-key allowance matters operationally: a crash that loses receipts may 
 same crash that lost the session key. Permitting the parent lets a recovering emitter
 disclose the loss without first having to re-establish the key that died with it.
 
-## 4. Overlapping disclosures — mostly dissolved, one case remains
+## 4. Overlapping disclosures: mostly dissolved, one case remains
 
 The issue leaves this underspecified, and the fixtures deliberately do not implement it.
 
@@ -131,7 +131,7 @@ each element occupies one position, so two disclosures cannot claim the same spa
 is no span to claim, only a position to occupy.
 
 What remains is **consecutive disclosures**: a disclosure whose `previous_receipt_hash`
-names another disclosure rather than a receipt. That is a real operational state — an
+names another disclosure rather than a receipt. That is a real operational state: an
 emitter that crashed, disclosed, and crashed again before emitting a receipt.
 
 **Position:** allow it, and require the verifier to report the run length. A single
@@ -153,7 +153,7 @@ issue's field list. `gen_gap_disclosure_vectors.py` rebuilds them.
 | `11-gap-disclosure-range-mismatch` | **Removed.** Partial coverage is not expressible when coverage is structural. Replaced by `11-gap-disclosure-dangling-predecessor`: the disclosure links back to an element that is not in the chain. |
 | `12-gap-disclosure-unbound` (`disclosed_at != range_end_before`) | Replaced by `12-gap-disclosure-successor-does-not-link`: the next element links past the disclosure, leaving it attached at one end. This is the check the old fixture was reaching for and could not express. |
 | `14-gap-disclosure-foreign-key` | Kept. The permitted issuer is now read off the linked element instead of supplied through the verification context. |
-| `15-gap-disclosed-null-estimate` | Folded into `15-gap-disclosed-parent-key-null-estimate`, which also covers signing by the hierarchical parent — the case where the crash took the session key with it. |
+| `15-gap-disclosed-null-estimate` | Folded into `15-gap-disclosed-parent-key-null-estimate`, which also covers signing by the hierarchical parent: the case where the crash took the session key with it. |
 | `10`, `13`, `16`, `17` | Restructured onto the new fields; substance unchanged. |
 
 The disclosure no longer carries `disclosed_at`, `range_start_after`, or
@@ -167,12 +167,12 @@ fixture, which is the outcome that check exists to force.
 
 **Open: one requirement in the draft text has no vector.** The normative draft requires
 `type` to equal `GapDisclosure/1.0`; the fixture verifier does not implement that check,
-so the completeness suite cannot flag it — it only sees rules that exist. This is the
+so the completeness suite cannot flag it: it only sees rules that exist. This is the
 class of gap the method does not close, stated in `docs/conformance-method.md` §6, and
 it is recorded here rather than left for someone to find. The other two members of this
 list resolved with the 2026-08-08 review: the `session_id` match is now the
 `disclosure_stream_mismatch` rule with two vectors, and the `cause` enum requirement was
-dropped — a vocabulary constraint on an uncorroborated field is precision without
+dropped: a vocabulary constraint on an uncorroborated field is precision without
 evidence.
 
 ## What I might have wrong
@@ -188,7 +188,7 @@ evidence.
   the bounds.
 - **It assumes the emitter can write the disclosure at all.** A crash that destroys the
   signing key and its parent leaves an emitter unable to disclose anything. Such a gap is
-  indistinguishable from a silent one, and no design fixes that — it is a boundary to
+  indistinguishable from a silent one, and no design fixes that: it is a boundary to
   state, not a hole to close.
 - **`receipt_gap_disclosed` as both a status and a warning** is how the current fixtures
   encode it. Whether the outcome should also surface as a warning is a presentation
@@ -205,8 +205,8 @@ surveying the spec's normative statements against what enforces them.
 The resolved reading: an unpinned key is an inability to check, not evidence of forgery.
 Fixture 16 now expects a sixth outcome, `gap_disclosure_unverified`, with a
 `disclosure_key_unknown` advisory and no failures. It does **not** count as a properly
-disclosed gap — `receipt_gap_disclosed` requires a signature the verifier actually
-checked — and it accuses no one. The structural checks (issuer binding, both splice
+disclosed gap: `receipt_gap_disclosed` requires a signature the verifier actually
+checked, and it accuses no one. The structural checks (issuer binding, both splice
 seals, contradiction) still run first; any of them failing is positive evidence and
 yields `receipt_invalid` regardless of whether the key is held.
 
@@ -219,20 +219,20 @@ The [review on #117](https://github.com/agentrust-io/trace-spec/issues/117) (car
 confirmed the splice model as the viable direction and narrowed it in five particulars.
 Each is now implemented or recorded; the fixture numbers below are the current ones,
 after the set moved to `examples/action-receipts/conformance/proposal-117/`. (Earlier
-sections and amendments keep the numbering of their day — this note is append-only, and
-the mapping is one-to-one: old `10`–`17` are now `proposal-117/01`–`08`.)
+sections and amendments keep the numbering of their day: this note is append-only, and
+the mapping is one-to-one: old `10`, `17` are now `proposal-117/01`, `08`.)
 
 > Conclusion: the revised chain-element shape is the viable direction, but the verifier
 > claim needs to stay narrower than "covers the missing range."
 
-1. **Range fields removed** — already the position of this note (§1-2); the review
+1. **Range fields removed**: already the position of this note (§1-2); the review
    reached it independently. Chain links suffice.
 2. **`cause` and `receipts_lost_estimate` optional and descriptive only.** The
    normative draft had `cause` as a required four-value enum. Dropped: a vocabulary
    constraint on a field nothing corroborates is precision without evidence. The
    verifier conditions no outcome on either field.
 3. **Stream binding.** The disclosure carries `session_id` under its signature, and the
-   verifier now compares it against the stream under verification —
+   verifier now compares it against the stream under verification:
    `disclosure_stream_mismatch`, vectors 12 and 13. Without the comparison, a
    disclosure honestly signed for stream A is a transplantable excuse for a gap in
    stream B. This was the one review point the fixtures did not already implement:
@@ -242,14 +242,14 @@ the mapping is one-to-one: old `10`–`17` are now `proposal-117/01`–`08`.)
 5. **Policy-gated acceptance, with one hard bound.** Whether `receipt_gap_disclosed`
    is accepted stays a relying-party policy input, and no policy may read it as
    satisfying a profile that requires independently proven completeness. The
-   disclosure proves *where* the gap sits — not that the missing receipts existed,
+   disclosure proves *where* the gap sits: not that the missing receipts existed,
    how many were lost, or that the issuer did not selectively omit them.
 
 The review also validated the current tree independently: PR #122 merged, 16 top-level
 fixtures over 14 named obligations, suite and lint passing at upstream `a817621`.
 
 Separately, the [#124 review](https://github.com/agentrust-io/trace-spec/issues/124)
-resolved where the completeness checker lives (here, not `trace-tests` — both things it
+resolved where the completeness checker lives (here, not `trace-tests`: both things it
 measures are local) and re-shaped its inventory: an explicit rule registry the verifier
 consumes, mutated by named hook, in place of AST recovery. That is implemented in
 `tests/test_action_receipt_fixtures.py` / `tests/test_vector_completeness.py`, with two
@@ -260,7 +260,7 @@ disclosure rule in this note now carries two vectors, 01-16.
 The draft text said a disclosure not linked from both directions covers nothing; the
 reference verifier granted a clean tail disclosure (no successor yet, everything else
 valid) full `receipt_gap_disclosed`, and no fixture pinned either reading. The gap
-mattered adversarially — a chain truncated immediately after a disclosure is
+mattered adversarially: a chain truncated immediately after a disclosure is
 indistinguishable from an honest tail, so the verifier's generosity to the tail was
 generosity to the truncation, and the seal that the replay argument (vector 12) leans
 on simply did not exist there. Resolved by the same §3.3.1 principle used twice
@@ -268,6 +268,6 @@ already: no successor is an *inability to check*, not a defect. New warning rule
 `disclosure_not_yet_sealed`; a clean tail yields `gap_disclosure_unverified` with the
 advisory, accuses no one, confers nothing, and upgrades on re-verification once the
 chain resumes. Vectors 17 (clean tail) and 18 (tail with a stale successor-link value
-in the context — separating implementations that derive sealed-ness from a field's
+in the context: separating implementations that derive sealed-ness from a field's
 non-nullness rather than from the successor's existence), margin three including the
 tail-contradiction vector 16.

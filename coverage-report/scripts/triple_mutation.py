@@ -1,4 +1,4 @@
-"""Third-order mutation — the last unmeasured form of masking.
+"""Third-order mutation: the last unmeasured form of masking.
 
 Pairs were measured in all three validator corpora and found clean except for one mutual
 pair in the third. Triples were left as a stated gap. This closes it for the first corpus,
@@ -16,7 +16,7 @@ The question is the conditional one again, lifted by a rank:
 that it is masked by {*b*, *c*} as well, and counting those would inflate the result with
 restatements of a second-order fact. A triple finding counts only when neither of its
 two-element subsets already masks the same obligation. In this corpus no pair masks
-anything, so the filter is vacuous here — but it is written in because the same script run
+anything, so the filter is vacuous here, but it is written in because the same script run
 against the third corpus would otherwise report derivatives of the known 363/365 pair.
 
 Cost: every pair and every triple is evaluated once and cached, which is
