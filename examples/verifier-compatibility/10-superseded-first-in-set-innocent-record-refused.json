@@ -1,0 +1,62 @@
+{
+  "name": "superseded-first-in-set-innocent-record-refused",
+  "description": "The same non-conformant configuration as 08, reached from the other two directions at once. The v0.1 identifier sits first in the accepted set rather than last, and the record presented is an ordinary v0.2 record with nothing wrong with it. Both matter. An implementation that scans only the tail of its accepted set passes 08 and fails here, and because the record is schema-valid and correctly signed, a verifier implementing none of these obligations verifies it, which is what makes this vector separate where 08 cannot: 08's record carries v0.1 and is refused by the schema whether or not any profile rule ran.",
+  "profile": "trace.verifier_compatibility.proposal.v0",
+  "proposal": {
+    "issue": "agentrust-io/trace-spec#116",
+    "status": "under review \u2014 not accepted normative text"
+  },
+  "verifier": {
+    "accepted_profiles": [
+      "tag:agentrust.io,2026:trace-v0.1",
+      "tag:agentrust-io.com,2026:trace-v0.2"
+    ],
+    "verification_time": 1785000100,
+    "check_freshness": false
+  },
+  "trusted_key": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "S9f_IqfsGG7jIzI7brZ7VVXCyF-_1jj_Guc1ynPKpuI"
+  },
+  "record": {
+    "eat_profile": "tag:agentrust-io.com,2026:trace-v0.2",
+    "iat": 1785000000,
+    "subject": "spiffe://factory.example/agent/payments/prod",
+    "model": {
+      "provider": "anthropic",
+      "model_id": "claude-sonnet-4-6"
+    },
+    "runtime": {
+      "platform": "software-only",
+      "measurement": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "policy": {
+      "bundle_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "enforcement_mode": "enforce"
+    },
+    "data_class": "confidential",
+    "build_provenance": {
+      "slsa_level": 0,
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "appraisal": {
+      "status": "affirming",
+      "verifier": "https://verifier.example/v1"
+    },
+    "transparency": "https://rekor.example/api/v1/log/entries/0",
+    "cnf": {
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "S9f_IqfsGG7jIzI7brZ7VVXCyF-_1jj_Guc1ynPKpuI"
+      }
+    },
+    "signature": "_kxTMPJeRBIceEHkwbkmgHyRamGZVkkuNVKebfQ93XIRfGkXqpwy4X_90DSx7fQ5up5VztTfAByT1QgxTYICAA"
+  },
+  "expected": {
+    "outcome": "refused",
+    "failure": "superseded_profile_in_accepted_set",
+    "statement": null
+  }
+}

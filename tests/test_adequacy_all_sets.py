@@ -159,16 +159,38 @@ def test_no_set_is_satisfied_by_an_unconditional_answer(name: str) -> None:
 # The shortfall this repository currently carries, stated exactly. Widening it fails
 # here; closing it fails here too, and the entry is then deleted.
 KNOWN_THIN: dict[str, dict[str, str]] = {
-    # This fork's own set, and the shape #124 established as insufficient. Four of its
-    # five refusal rules carry one vector each, on a set written here before that rule
-    # existed. Listed rather than skipped: a named shortfall asserted to its exact
-    # extent cannot widen unnoticed, and each entry is deleted when someone writes the
-    # second vector. `unschemaed_profile_in_accepted_set` is absent because it has two,
-    # which is what closing one of these looks like.
+    # This fork's own set, and the shape #124 established as insufficient. It was four
+    # of the five refusal rules. Two have since been closed by writing the second
+    # vector: `profile_absent` by 11, which carries a profile claim that is present and
+    # empty rather than absent, and `superseded_profile_in_accepted_set` by 10, which
+    # puts the v0.1 identifier first in the accepted set rather than last.
+    #
+    # The two that remain were measured and are not closable, which is different from
+    # not yet done, so the reason is recorded here rather than left as an open task:
+    #
+    #   no_accepted_profiles       The rule fires on the verifier's own configuration
+    #                              before any record is read, and the configuration has
+    #                              one shape: the accepted set is empty. The one other
+    #                              axis, pairing the empty set with a second defect the
+    #                              verifier would catch later, needs `check_freshness`,
+    #                              which every vector in the set asserts is False, for
+    #                              a good reason: a fixed `iat` would make the set
+    #                              expire. Varying the record instead pins nothing, as
+    #                              no plausible implementation branches on record
+    #                              content when deciding an empty set accepts nothing.
+    #
+    #   superseded_profile_refused The record must carry the v0.1 identifier and the
+    #                              accepted set must exclude it. The set can hold only
+    #                              v0.2, because any other member trips
+    #                              `unschemaed_profile_in_accepted_set` first, so there
+    #                              is no second configuration to present. What is left
+    #                              is varying record content, which again pins nothing.
+    #
+    # A second vector written to close a count rather than to catch a defect an
+    # implementation could plausibly have makes this record worse, not better: it
+    # reports a margin that does not exist.
     "verifier-compatibility": {
         "no_accepted_profiles": "06-empty-accepted-set-refused",
-        "profile_absent": "07-profile-absent-refused",
-        "superseded_profile_in_accepted_set": "08-dual-accept-configuration-refused",
         "superseded_profile_refused": "03-superseded-version-refused",
     },
 }

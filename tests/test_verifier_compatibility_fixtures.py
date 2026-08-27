@@ -57,6 +57,8 @@ def test_vector_set_is_complete() -> None:
         "07-profile-absent-refused.json",
         "08-dual-accept-configuration-refused.json",
         "09-unschemaed-profile-first-in-set-refused.json",
+        "10-superseded-first-in-set-innocent-record-refused.json",
+        "11-empty-profile-string-refused.json",
     ]
 
 
