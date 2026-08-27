@@ -33,30 +33,24 @@ import sys
 import types
 from pathlib import Path
 
-from mutation_report import FIXTURES, VERIFIER, Site, _outcomes, _sites
+from mutation_report import (
+    FIXTURES,
+    VERIFIER,
+    Site,
+    _outcomes,
+    _sites,
+    drop_sites,
+    reconcile_or_refuse,
+)
 
 
 def _run(sites: tuple[Site, ...]) -> list:
-    """Re-execute the verifier with an arbitrary set of emission sites neutralised."""
-    tree = ast.parse(VERIFIER.read_text(encoding="utf-8"))
-    append_lines = {s.lineno for s in sites if s.form == "append"}
-    inline = {(s.lineno, s.code) for s in sites if s.form == "inline"}
+    """Re-execute the verifier with an arbitrary set of emission sites neutralised.
 
-    class Drop(ast.NodeTransformer):
-        def visit_Expr(self, node: ast.Expr) -> ast.AST:
-            return ast.copy_location(ast.Pass(), node) if node.lineno in append_lines else node
-
-        def visit_keyword(self, node: ast.keyword) -> ast.AST:
-            self.generic_visit(node)
-            if node.arg in {"failures", "warnings"} and isinstance(node.value, ast.List):
-                node.value.elts = [
-                    e
-                    for e in node.value.elts
-                    if not (isinstance(e, ast.Constant) and (e.lineno, e.value) in inline)
-                ]
-            return node
-
-    mutated = ast.fix_missing_locations(Drop().visit(tree))
+    Shares `drop_sites` with the other two scripts. See the note there: three copies
+    of one transformer is how a discovered site form goes unapplied.
+    """
+    mutated = drop_sites(ast.parse(VERIFIER.read_text(encoding="utf-8")), sites)
     name = "_mut3_" + "_".join(str(s.lineno) for s in sites)
     module = types.ModuleType(name)
     module.__file__ = str(VERIFIER)
@@ -80,6 +74,15 @@ def main() -> int:
     triples = list(itertools.combinations(codes, 3))
     print(f"verifier: {VERIFIER}")
     print(f"vectors:  {len(FIXTURES)}   obligations: {len(codes)}")
+    reconcile_or_refuse(sites)
+    if len(sites) < 3:
+        print(
+            f"\nREFUSING TO REPORT: {len(sites)} site(s) yields no triple to evaluate.\n"
+            "\"Nothing new at rank three\" over zero third-order mutants says nothing\n"
+            "about rank three.",
+            file=sys.stderr,
+        )
+        return 2
     print(f"mutants:  {len(pairs)} pairs + {len(triples)} triples = "
           f"{len(pairs) + len(triples)}")
     print()

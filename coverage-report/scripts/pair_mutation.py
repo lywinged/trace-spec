@@ -39,39 +39,28 @@ import types
 from pathlib import Path
 from typing import Any
 
-from mutation_report import FIXTURES, TRACE_SPEC, VERIFIER, Site, _outcomes, _sites
+from mutation_report import (
+    FIXTURES,
+    TRACE_SPEC,
+    VERIFIER,
+    Site,
+    _outcomes,
+    _sites,
+    drop_sites,
+    reconcile_or_refuse,
+)
 
 
 def _run_mutant(sites: list[Site]) -> list[tuple[str, str, tuple, tuple]]:
     """Re-execute the verifier with an arbitrary set of emission sites neutralised.
 
-    Same two precautions as the first-order case, for the same reasons: `pass` rather than
-    deletion, so a rule that is the sole body of an `if` does not leave an empty block and
-    a mutant that fails to compile; and a real registered module, so `@dataclass` can
-    resolve `sys.modules[cls.__module__]` instead of raising before any vector runs.
+    The transformer is imported rather than restated. This file used to carry its own
+    copy, identical to the one in `mutation_report` and to a third in
+    `triple_mutation`, which meant a newly discovered site form was applied by
+    whichever copies happened to be updated. A form that is discovered but not applied
+    produces a mutant identical to the baseline, and that reads as "no vector notices".
     """
-    tree = ast.parse(VERIFIER.read_text(encoding="utf-8"))
-    append_lines = {s.lineno for s in sites if s.form == "append"}
-    inline = {(s.lineno, s.code) for s in sites if s.form == "inline"}
-
-    class Drop(ast.NodeTransformer):
-        def visit_Expr(self, node: ast.Expr) -> ast.AST:
-            return ast.copy_location(ast.Pass(), node) if node.lineno in append_lines else node
-
-        def visit_keyword(self, node: ast.keyword) -> ast.AST:
-            self.generic_visit(node)
-            if node.arg in {"failures", "warnings"} and isinstance(node.value, ast.List):
-                node.value.elts = [
-                    element
-                    for element in node.value.elts
-                    if not (
-                        isinstance(element, ast.Constant)
-                        and (element.lineno, element.value) in inline
-                    )
-                ]
-            return node
-
-    mutated = ast.fix_missing_locations(Drop().visit(tree))
+    mutated = drop_sites(ast.parse(VERIFIER.read_text(encoding="utf-8")), sites)
     name = "_mutant_pair_" + "_".join(f"{s.form}{s.lineno}" for s in sites)
     module = types.ModuleType(name)
     module.__file__ = str(VERIFIER)
@@ -92,6 +81,15 @@ def main() -> int:
 
     print(f"verifier: {VERIFIER}")
     print(f"sites:    {len(sites)}   pairs: {len(sites) * (len(sites) - 1) // 2}")
+    reconcile_or_refuse(sites)
+    if len(sites) < 2:
+        print(
+            f"\nREFUSING TO REPORT: {len(sites)} site(s) yields no pair to evaluate.\n"
+            "A masking claim over zero joint mutants is not a weaker result than one\n"
+            "over many, it is a different sentence with the same words.",
+            file=sys.stderr,
+        )
+        return 2
     print()
 
     masked: list[tuple[str, str]] = []
