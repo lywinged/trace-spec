@@ -885,3 +885,60 @@ def test_verification_statement_reports_check_coverage():
     assert checked.freshness_checked is False
     assert checked.nonce_checked is True
     assert checked.revocation_checked is True
+
+
+# --- the parameter's own type, not the shape inside it ------------------------
+#
+# verify_record documents ValueError and InvalidSignature; jwk_thumbprint
+# documents ValueError. Both dereferenced their first parameter with `.get(...)`
+# before establishing it was a mapping, so every non-dict input left through an
+# AttributeError instead, which a caller's `except ValueError` does not catch.
+#
+# This is about the parameter itself rather than any field within it. Guards on
+# fields inside a record cannot reach it: `record["identity"]` is only checkable
+# once `record` is known to be a dict.
+
+NON_OBJECTS = [None, 5, 0, "a string", "", [], [1, 2], True, False, b"bytes"]
+
+
+@pytest.mark.parametrize("bad", NON_OBJECTS)
+def test_verify_record_refuses_a_non_object_record(bad):
+    key = generate_key()
+    with pytest.raises(ValueError, match="record must be a JSON object"):
+        verify_record(bad, key_to_jwk(key))
+
+
+@pytest.mark.parametrize("bad", NON_OBJECTS)
+def test_jwk_thumbprint_refuses_a_non_object_jwk(bad):
+    with pytest.raises(ValueError, match="jwk must be a JSON object"):
+        jwk_thumbprint(bad)
+
+
+@pytest.mark.parametrize("body", [b"[1,2,3]", b'"a string"', b"null", b"42", b"true"])
+def test_a_caller_catching_valueerror_catches_an_untrusted_body(body):
+    """The shape this actually takes in a caller.
+
+    A verifier receives bytes, parses them, and rejects what does not verify.
+    Every one of these bodies is valid JSON and none is an object. With the
+    parameter unchecked they raised AttributeError, which is not a ValueError,
+    so they escaped the rejection branch entirely and surfaced as an unhandled
+    error in whatever was calling the verifier.
+    """
+    key = generate_key()
+    try:
+        verify_record(json.loads(body), key_to_jwk(key))
+    except ValueError:
+        return
+    pytest.fail(f"{body!r} was accepted, or left through something ValueError misses")
+
+
+def test_the_record_type_is_checked_before_the_record_is_read():
+    """Ordering: verifier-configuration errors still come first.
+
+    `accepted_profiles` is the verifier's own configuration and is wrong before
+    any record is involved, so it keeps reporting first. The record's type is
+    checked after that and before the record is read.
+    """
+    key = generate_key()
+    with pytest.raises(ValueError, match="accepted_profiles is empty"):
+        verify_record(None, key_to_jwk(key), accepted_profiles=())
