@@ -18,6 +18,25 @@ thing as a failure demanding either the canonical idiom or an explicit declarati
 converts an unrecognised rule from a silent omission into a red run, which is the design
 principle of the source-recovered inventory applied consistently to itself.
 
+**Correction.** This module was written against a verifier whose obligations lived in
+`failures.append("literal")` sites, and the registry refactor moved twenty-two of the
+twenty-three into an explicit `RULES` table. It did not know that shape, so it recovered
+zero rules of twenty-three, found nothing it could not recognise in the nothing it had
+found, and printed "no rule is written in a shape the inventory cannot recover" while
+exiting 0.
+
+That is the same blindness the same refactor caused in `mutation_report.py`, which
+reported "every obligation is held" over one site of twenty-three. Two things follow, and
+the second matters more than the first: it now reads the registry through
+`mutation_report._sites`, the one place that shape is parsed, rather than learning it a
+second time; and it refuses rather than reports when discovery comes back empty. A guard
+whose whole purpose is to turn a silent omission into a red run may not have "I found
+nothing" as a success path.
+
+Nothing ran it. `coverage-report/scripts/` was referenced by no test and no workflow, which
+is how the figures in `REPORT.md` drifted for months; two of the three scripts here have
+since been given a test, and this was the third.
+
 Run: python inventory_guard.py [path-to-trace-spec]
 """
 
@@ -146,8 +165,29 @@ def main() -> int:
     findings, recognised, inline_codes = scan(verifier)
     live = [f for f in findings if f.source not in DECLARED_EXCEPTIONS]
 
+    # The registry is parsed in exactly one place. Learning the shape a second time here
+    # is how the two tools came to disagree about what a rule looks like.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from mutation_report import _sites  # noqa: PLC0415
+
+    registry_rules = [s for s in _sites() if s.form == "registry"]
+    total = recognised + inline_codes + len(registry_rules)
+
+    if total == 0:
+        print(
+            "REFUSING TO REPORT: no obligation was recovered in any known shape.\n"
+            "  This guard exists to turn a rule the inventory cannot see into a red run.\n"
+            "  Recovering nothing and reporting all clear is the failure it was written\n"
+            "  to prevent, arriving through its own front door. Teach it the shape the\n"
+            "  verifier now uses, or fix the path it was pointed at.",
+            file=sys.stderr,
+        )
+        return 2
+
     print(f"[inventory] {recognised} rule(s) in the recognised `append(\"literal\")` shape")
     print(f"[inventory] {inline_codes} code(s) emitted through inline literal lists")
+    print(f"[inventory] {len(registry_rules)} rule(s) in the `RULES` registry")
+    print(f"[inventory] {total} obligation(s) recovered in total")
     print()
 
     if live:
