@@ -1,5 +1,19 @@
 """Re-verify every fixture signature through a path that shares no code with them.
 
+**Second correction.** This module said it walked the fixture directories and walked two
+of them, `action-receipts/conformance/` and `verifier-compatibility/`. Fifty-seven of the
+eighty-five signed fixtures under `examples/` were covered; twenty-eight were not, among
+them the whole twenty-three-fixture `delegation-link/` set and the four
+`canonicalization-boundary/` records. Those were verified elsewhere but not independently:
+`test_delegation_vectors.py` imports nothing from `agentrust_trace` and canonicalizes with
+`rfc8785`, which is the exact half-independence the correction below already describes, and
+`test_canonicalization_boundary.py` calls `verify_record` and `rfc8785` both.
+
+`test_every_fixture_is_covered_by_some_independent_check` could not see it, because its
+universe was `ALL_RECEIPT_FIXTURES` rather than the fixture tree. A coverage test whose
+universe is a hardcoded subset reports full coverage of the subset and says nothing about
+the rest. The universe is discovered now.
+
 A green conformance run only proves that the fixtures and the checker agree, and both
 were written by the same hand in the same sitting. This module walks the fixture
 directories, rebuilds each signing input from the JSON, and verifies with `cryptography`
@@ -53,9 +67,40 @@ def _verify(signed: dict[str, Any], jwk: dict[str, str]) -> None:
 
 RECEIPT_DIR = EXAMPLES / "action-receipts" / "conformance"
 COMPAT_DIR = EXAMPLES / "verifier-compatibility"
+DELEGATION_DIR = EXAMPLES / "delegation-link"
+CANONICAL_DIR = EXAMPLES / "canonicalization-boundary"
 
 ALL_RECEIPT_FIXTURES = sorted(RECEIPT_DIR.rglob("*.json"))
 COMPAT_FIXTURES = sorted(COMPAT_DIR.glob("*.json"))
+DELEGATION_FIXTURES = sorted(DELEGATION_DIR.glob("*.json"))
+CANONICAL_FIXTURES = sorted(CANONICAL_DIR.glob("*.json"))
+
+
+def _carries_a_signature(node: Any) -> bool:
+    """A fixture is in scope if a signature appears anywhere inside it.
+
+    By shape, not by path, for the same reason `_has` selects by shape: a directory
+    list is a claim about the tree that stops being true when someone adds to it.
+    """
+    if isinstance(node, dict):
+        if isinstance(node.get("signature"), str) and node["signature"]:
+            return True
+        return any(_carries_a_signature(value) for value in node.values())
+    if isinstance(node, list):
+        return any(_carries_a_signature(item) for item in node)
+    return False
+
+
+def _every_signed_fixture(root: Path = EXAMPLES) -> set[Path]:
+    found = set()
+    for path in root.rglob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if _carries_a_signature(payload):
+            found.add(path)
+    return found
 
 
 def _has(key: str) -> list[Path]:
@@ -82,6 +127,17 @@ RECEIPT_FIXTURES = _has("receipt")
 # Fixtures with nothing to verify, each with the reason. An entry is a claim that has
 # to survive review; the alternative is a selector that quietly skips a fixture and a
 # suite that reports full coverage it does not have.
+# Files under examples/ that carry a `signature` string but are not fixtures with a
+# record to re-verify. Declared rather than skipped by a path rule, so that adding one
+# is a decision somebody made and not a selector quietly widening.
+NOT_A_FIXTURE = {
+    "action-receipts/acta/expected.json": (
+        "an expectations file for the ACTA chain, not a record: it carries the signer "
+        "key and the results table, and its `chain` entries are verified by the ACTA "
+        "conformance tests against that key"
+    ),
+}
+
 SIGNATURE_FREE = {
     "03-missing-required-receipt.json": (
         "the absence of a receipt is the case under test, so there is no signature"
@@ -168,20 +224,113 @@ def test_receipt_signature_independently(path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("path", DELEGATION_FIXTURES, ids=lambda p: p.stem)
+def test_delegation_hop_signatures_independently(path: Path) -> None:
+    """Every hop in every chain, verified without `rfc8785` and without the SDK.
+
+    `test_delegation_vectors.py` already verifies these, and imports nothing from
+    `agentrust_trace`, which is half of what independence means here. It canonicalizes
+    with `rfc8785`, the library the generators use, so a defect there would have been
+    invisible on both sides for the whole set.
+
+    The two vectors that name a bad signature must fail here, and nothing else may.
+    A negative vector whose signature actually verifies is not testing what it names.
+    """
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    records = fixture["records"]
+    assert records, f"{path.name}: no records to verify"
+
+    expects_a_bad_signature = "record_signature_invalid" in fixture["expected"].get("codes", [])
+    failed = []
+    for index, record in enumerate(records):
+        try:
+            _verify(record, record["cnf"]["jwk"])
+        except InvalidSignature:
+            failed.append(index)
+
+    if expects_a_bad_signature:
+        assert failed, (
+            f"{path.name} expects record_signature_invalid, but every hop verifies "
+            "through an independent path. The vector is not testing what it names."
+        )
+    else:
+        assert not failed, (
+            f"{path.name}: hop(s) {failed} do not verify through an independent path, "
+            "and the vector expects no signature failure"
+        )
+
+
+@pytest.mark.parametrize("path", CANONICAL_FIXTURES, ids=lambda p: p.stem)
+def test_canonicalization_boundary_signatures_independently(path: Path) -> None:
+    """These exist because two serializers can disagree, so verifying them with the
+    one under test is the one arrangement that cannot detect the disagreement.
+
+    `test_canonicalization_boundary.py` calls `verify_record` and `rfc8785`. Every
+    record here is correctly signed by design: the vectors separate JCS from an ad-hoc
+    serializer, so a bad signature would let one pass for the wrong reason.
+    """
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    record = fixture.get("record", fixture)
+
+    _verify(record, record["cnf"]["jwk"])
+
+
+def test_the_universe_is_discovered_and_not_listed() -> None:
+    """The walk has to find more than the directories named above, or the coverage
+    test below is checking a set against itself."""
+    found = _every_signed_fixture()
+    assert len(found) >= 80, f"only {len(found)} signed fixtures found under examples/"
+    named = set(ALL_RECEIPT_FIXTURES) | set(COMPAT_FIXTURES)
+    assert found - named, "the walk found nothing outside the originally named directories"
+
+
+def test_the_walk_finds_a_fixture_in_a_directory_nobody_named(tmp_path: Path) -> None:
+    """The discovery is the point, and the coverage test alone does not prove it works.
+
+    Reverting the universe to the old hardcoded `ALL_RECEIPT_FIXTURES` leaves the suite
+    green, because the selectors above happen to cover everything today, so nothing is
+    uncovered either way. The discovered universe earns its place only when a signed
+    fixture appears somewhere no selector names, which is the case it exists for and the
+    one a mutation of the current tree cannot reach. So it is put there.
+    """
+    novel = tmp_path / "a-directory-added-next-year"
+    novel.mkdir()
+    (novel / "some-new-vector.json").write_text(
+        json.dumps({"record": {"iat": 1, "signature": "AAAA"}}), encoding="utf-8"
+    )
+    (novel / "not-signed.json").write_text(json.dumps({"iat": 1}), encoding="utf-8")
+
+    found = _every_signed_fixture(tmp_path)
+
+    assert {p.name for p in found} == {"some-new-vector.json"}, (
+        "the walk did not find a signed fixture in an unnamed directory, so the "
+        "coverage test's universe is effectively the hardcoded list it replaced"
+    )
+
+
 def test_every_fixture_is_covered_by_some_independent_check() -> None:
     """No fixture may sit in the directory with its signature never re-derived.
 
     Selection is by shape, so a fixture carrying neither a receipt nor a disclosure
     would otherwise be skipped by both parametrizations without anything noticing.
     """
-    covered = {p.name for p in GAP_FIXTURES} | {p.name for p in RECEIPT_FIXTURES}
-    every = {p.name for p in ALL_RECEIPT_FIXTURES}
-    uncovered = sorted(every - covered - set(SIGNATURE_FREE))
+    covered = (
+        set(GAP_FIXTURES) | set(RECEIPT_FIXTURES) | set(COMPAT_FIXTURES)
+        | set(DELEGATION_FIXTURES) | set(CANONICAL_FIXTURES)
+    )
+    every = _every_signed_fixture()
+    uncovered = sorted(
+        p.relative_to(EXAMPLES).as_posix()
+        for p in every - covered
+        if p.name not in SIGNATURE_FREE
+        and p.relative_to(EXAMPLES).as_posix() not in NOT_A_FIXTURE
+    )
     assert not uncovered, (
         f"fixtures with no independently verifiable signature: {uncovered}. "
         "If one is signature-free by design, say so explicitly rather than letting "
         "the selectors skip it."
     )
-    assert GAP_FIXTURES and RECEIPT_FIXTURES and COMPAT_FIXTURES, (
-        "a selector matched nothing, so its checks would pass vacuously"
-    )
+    assert (
+        GAP_FIXTURES and RECEIPT_FIXTURES and COMPAT_FIXTURES
+        and DELEGATION_FIXTURES and CANONICAL_FIXTURES
+    ), "a selector matched nothing, so its checks would pass vacuously"
