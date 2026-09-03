@@ -1005,3 +1005,40 @@ def test_the_record_type_is_checked_before_the_record_is_read():
     key = generate_key()
     with pytest.raises(ValueError, match="accepted_profiles is empty"):
         verify_record(None, key_to_jwk(key), accepted_profiles=())
+#: Values a caller can hand a function that documents an object argument. The last
+#: five are the ones a record assembled from parsed JSON can actually carry.
+_NOT_AN_OBJECT = ("a-string", 123, None, [1, 2], True, False, 0, "", b"bytes", 1.5)
+
+
+@pytest.mark.parametrize("value", _NOT_AN_OBJECT)
+def test_jwk_thumbprint_refuses_a_non_object_with_the_error_it_documents(value):
+    """`jwk_thumbprint` documents `ValueError` and read `.get` off its argument first.
+
+    A JWK reaches it from a peer, a key document, or a record's own `cnf`, so its shape
+    is not something the caller has established. Before this it raised `AttributeError`,
+    which a caller written against the documented contract does not catch.
+    """
+    with pytest.raises(ValueError):
+        jwk_thumbprint(value)
+
+
+@pytest.mark.parametrize("value", _NOT_AN_OBJECT)
+def test_verify_record_refuses_a_non_object_record_with_the_error_it_documents(value):
+    """Same shape, on the argument that is by definition untrusted.
+
+    `verify_record`'s docstring says every rejection other than a bad signature is a
+    `ValueError`. A non-object record reached `record.get("eat_profile")` and raised
+    `AttributeError` instead.
+    """
+    key = generate_key()
+    with pytest.raises(ValueError):
+        verify_record(value, key_to_jwk(key))
+
+
+def test_the_guards_do_not_refuse_what_they_should_accept():
+    """Without this, raising unconditionally would pass both tests above."""
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+
+    jwk_thumbprint(key_to_jwk(key))
+    verify_record(record, key_to_jwk(key))

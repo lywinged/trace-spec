@@ -155,10 +155,11 @@ def _evidence_hash_mismatch(f: dict[str, Any]) -> bool:
 
 
 def _issuer_key_unknown(f: dict[str, Any]) -> bool:
-    # Spec section 3.3.1: a receipt whose issuer key is unknown to the verifier is
-    # unverified, not invalid. "Invalid" would claim evidence of a defect that an
-    # unpinned key does not provide; the structural checks still run, and any of them
-    # failing is positive evidence that does make the receipt invalid.
+    # Spec section 3.3.2: a receipt whose issuer key is unknown to the verifier is
+    # unverified, not invalid. An unpinned key is an inability to check, not
+    # evidence of forgery, so this is an advisory rather than a failure; the
+    # structural checks still run, and any of them failing is positive evidence
+    # that does make the receipt invalid.
     return _trusted_jwk(f, f["receipt"]) is None
 
 

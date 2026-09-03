@@ -29,6 +29,17 @@ verifier to reject it and forbids accepting both. It is invalid under RFC 4151:
 """
 
 _DIGEST_RE = r"^sha(256:[0-9a-f]{64}|384:[0-9a-f]{96})$"
+
+# A workload identity, not a namespace. A SPIFFE ID names a trust domain *and* a
+# workload path within it, and a DID names a method and an identifier within that
+# method, so neither is complete at its prefix: `spiffe://example.org` names a trust
+# domain and no workload, and `did:` names nothing at all. The method name is held to
+# lowercase because DID Core section 3.1 fixes `method-char` to `%x61-7A / DIGIT` and
+# requires every DID to conform to that ABNF; the method-specific identifier is not
+# constrained here, so `did:key:z6Mk...` keeps its case. Mirrored verbatim in
+# `schema/trace-claim.json` and its copy, and held there by
+# `tests/test_the_schema_and_the_models_agree.py`.
+_SUBJECT_RE = r"^(spiffe://[^/]+/.+|did:[a-z0-9]+:.+)$"
 # ISO 8601 duration, spelled out by alternation rather than with a negative
 # lookahead so that the same pattern string can be used here and in the JSON
 # Schema: pydantic's default regex engine (Rust) has no look-around, so a
@@ -44,6 +55,7 @@ _DURATION_RE = rf"^P(\d+W|{_DURATION_DATE}(T{_DURATION_TIME})?|T{_DURATION_TIME}
 # builds against, and a model that accepts what the schema rejects sends the failure
 # downstream to whichever canonicalizer the producer happens to be using.
 JCS_SAFE_INTEGER = 9007199254740991
+
 
 def _not_a_boolean(value: Any) -> Any:
     """Reject ``True`` and ``False`` where JSON says integer.
@@ -355,7 +367,7 @@ class TrustRecord(_TraceModel):
 
     eat_profile: Literal["tag:agentrust-io.com,2026:trace-v0.2"]
     iat: Annotated[JsonInt, Field(ge=1700000000, le=JCS_SAFE_INTEGER)]
-    subject: Annotated[str, Field(pattern=r"^(spiffe://[^/]+/.+|did:[a-z0-9]+:.+)$")]
+    subject: Annotated[str, Field(pattern=_SUBJECT_RE)]
     model: ModelInfo
     runtime: RuntimeInfo
     policy: PolicyInfo

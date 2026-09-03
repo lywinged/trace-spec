@@ -8,9 +8,8 @@ import time
 from hmac import compare_digest
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 import rfc8785
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agentrust_trace.sign import _b64url_decode, _canonical_bytes, _pubkey_from_jwk
 

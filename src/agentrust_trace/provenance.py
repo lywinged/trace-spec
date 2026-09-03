@@ -66,6 +66,14 @@ def _as_object(value: Any, field: str) -> dict[str, Any]:
     return value
 
 
+def _tool_count(catalog: dict[str, Any]) -> int:
+    """Return the required catalog count as a JSON integer."""
+    value = catalog.get("tool_count")
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ProvenanceError("tool_catalog.tool_count must be a non-negative integer")
+    return value
+
+
 class ToolCatalogMismatch(ProvenanceError):
     """The server offered a tool set the record does not describe.
 
@@ -344,6 +352,7 @@ def verify_record(
     catalog = _as_object(record.get("tool_catalog"), "tool_catalog")
     if not _DIGEST_RE.match(str(catalog.get("hash", ""))):
         raise ProvenanceError("tool_catalog.hash is not a sha256: digest")
+    _tool_count(catalog)
 
     # Freshness. `issued_at` has been required and type-checked since the format
     # existed, with an error message explaining that a record with no issue time
@@ -376,24 +385,27 @@ def verify_record(
     if not signature:
         raise ProvenanceError("record carries no signature")
 
-    embedded = (record.get("cnf") or {}).get("jwk")
-    if embedded:
-        # Compared by RFC 7638 thumbprint, not by dict equality. A JWK is identified by
-        # its key material; `kid`, `use` and `alg` are optional members that carry none
-        # of it, and a key resolved from a JWKS endpoint normally has `kid` while
-        # `key_to_jwk` emits the bare minimum. Dict equality made that difference fatal
-        # and rejected records signed by exactly the right key.
-        from hmac import compare_digest
+    cnf = _as_object(record.get("cnf"), "cnf")
+    embedded = cnf.get("jwk")
+    if not embedded:
+        raise ProvenanceError("record carries no cnf.jwk")
 
-        try:
-            matched = compare_digest(jwk_thumbprint(embedded), jwk_thumbprint(trusted_jwk))
-        except ValueError as exc:
-            raise ProvenanceError(f"the record's embedded key is unusable: {exc}") from exc
-        if not matched:
-            raise ProvenanceError(
-                "the record's embedded key is not the trusted key. A record signed by "
-                "some other key is a record about a server somebody else is describing."
-            )
+    # Compared by RFC 7638 thumbprint, not by dict equality. A JWK is identified by
+    # its key material; `kid`, `use` and `alg` are optional members that carry none
+    # of it, and a key resolved from a JWKS endpoint normally has `kid` while
+    # `key_to_jwk` emits the bare minimum. Dict equality made that difference fatal
+    # and rejected records signed by exactly the right key.
+    from hmac import compare_digest
+
+    try:
+        matched = compare_digest(jwk_thumbprint(embedded), jwk_thumbprint(trusted_jwk))
+    except ValueError as exc:
+        raise ProvenanceError(f"the record's embedded key is unusable: {exc}") from exc
+    if not matched:
+        raise ProvenanceError(
+            "the record's embedded key is not the trusted key. A record signed by "
+            "some other key is a record about a server somebody else is describing."
+        )
 
     pub = _pubkey_from_jwk(trusted_jwk)
     body = _canonical_bytes({k: v for k, v in record.items() if k != "signature"})
@@ -439,4 +451,10 @@ def check_tool_catalog(record: dict[str, Any], tools: list[dict[str, Any]]) -> N
             f"({len(tools)} tools offered, record declares {declared_count}). "
             "The signature may be perfectly valid; this is about the server, not the "
             "document."
+        )
+    declared_count = _tool_count(catalog)
+    if declared_count != len(tools):
+        raise ProvenanceError(
+            f"tool_catalog.tool_count declares {declared_count} tools, but the matching "
+            f"catalog contains {len(tools)}"
         )

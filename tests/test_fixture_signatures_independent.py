@@ -70,7 +70,14 @@ COMPAT_DIR = EXAMPLES / "verifier-compatibility"
 DELEGATION_DIR = EXAMPLES / "delegation-link"
 CANONICAL_DIR = EXAMPLES / "canonicalization-boundary"
 
-ALL_RECEIPT_FIXTURES = sorted(RECEIPT_DIR.rglob("*.json"))
+GAP_DIR = EXAMPLES / "action-receipts" / "gap-disclosure"
+BUNDLE_DIR = EXAMPLES / "revocation-bundle"
+
+# The section 3.3.4 gap-disclosure vectors (#117) carry the same `gap_disclosure` and
+# `trusted_issuer_keys` shape as the conformance set, so the same selector and the
+# same independent check apply to them.
+ALL_RECEIPT_FIXTURES = sorted(RECEIPT_DIR.rglob("*.json")) + sorted(GAP_DIR.glob("*.json"))
+BUNDLE_FIXTURES = sorted(BUNDLE_DIR.glob("*.json"))
 COMPAT_FIXTURES = sorted(COMPAT_DIR.glob("*.json"))
 DELEGATION_FIXTURES = sorted(DELEGATION_DIR.glob("*.json"))
 CANONICAL_FIXTURES = sorted(CANONICAL_DIR.glob("*.json"))
@@ -171,7 +178,9 @@ def test_gap_disclosure_signature_independently(path: Path) -> None:
 
     try:
         _verify(disclosure, jwk)
-    except InvalidSignature:
+    except (InvalidSignature, ValueError):
+        # A structurally malformed signature (fixture 10, 32 bytes) is the same
+        # obligation as a cryptographic mismatch: it does not verify.
         assert is_negative, (
             f"{path.name}: signature does not verify through an independent path, and "
             "the fixture does not expect a signature failure"
@@ -275,6 +284,71 @@ def test_canonicalization_boundary_signatures_independently(path: Path) -> None:
     _verify(record, record["cnf"]["jwk"])
 
 
+def _thumbprint(jwk: dict[str, str]) -> str:
+    """RFC 7638 thumbprint through the independent canonicalizer."""
+    import hashlib
+    digest = hashlib.sha256(
+        jcs_minimal.dumps({"crv": jwk["crv"], "kty": jwk["kty"], "x": jwk["x"]})
+    ).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+@pytest.mark.parametrize("path", BUNDLE_FIXTURES, ids=lambda p: p.stem)
+def test_revocation_bundle_signatures_independently(path: Path) -> None:
+    """Section 3.2.3 vectors: every record against the trusted key, and the bundle's
+    own signature against the bundle key the caller trusts, both through the
+    independent canonicalizer. What the fixture expects decides which outcome a
+    non-verifying signature is allowed to have."""
+    fixture = json.loads(path.read_text(encoding="utf-8"))
+    context = fixture["context"]
+    for record in fixture["records"]:
+        _verify(record, context["trusted_key"])
+
+    bundle = context.get("bundle")
+    codes = set(fixture["expected"].get("codes", []))
+    if bundle is None:
+        assert "no_check_performed" in codes, (
+            f"{path.name}: no bundle in the fixture, but it does not expect "
+            "no_check_performed"
+        )
+        return
+    sig = bundle.get("sig")
+    if not isinstance(sig, dict) or sig.get("alg") != "ed25519":
+        assert codes & {"bundle_signature_unsupported", "bundle_malformed"}, (
+            f"{path.name}: bundle signature is not an Ed25519 one this check can "
+            "re-derive, and the fixture does not say so"
+        )
+        return
+    trusted = [
+        jwk for jwk in context.get("trusted_bundle_keys", [])
+        if bundle.get("bundle_key_id") in (jwk.get("kid"), _thumbprint(jwk))
+    ]
+    if not trusted:
+        assert "bundle_key_untrusted" in codes, (
+            f"{path.name}: bundle key is not among trusted_bundle_keys, and the "
+            "fixture does not expect bundle_key_untrusted"
+        )
+        return
+    unsigned = {k: v for k, v in bundle.items() if k != "sig"}
+    key = Ed25519PublicKey.from_public_bytes(_b64url(trusted[0]["x"]))
+    try:
+        key.verify(_b64url(sig["value"]), jcs_minimal.dumps(unsigned))
+    except (InvalidSignature, ValueError):
+        # A bundle the schema refuses (3b in check_bundle) never reaches the signature
+        # step, so a vector built by deleting a field after signing expects
+        # bundle_malformed, not a signature code.
+        assert codes & {"bundle_signature_invalid", "bundle_malformed"}, (
+            f"{path.name}: bundle signature does not verify through an independent "
+            "path, and the fixture expects neither bundle_signature_invalid nor "
+            "bundle_malformed"
+        )
+        return
+    assert "bundle_signature_invalid" not in codes, (
+        f"{path.name}: the fixture expects a bundle signature failure, but the "
+        "signature verifies. The vector is not testing what it names."
+    )
+
+
 def test_the_universe_is_discovered_and_not_listed() -> None:
     """The walk has to find more than the directories named above, or the coverage
     test below is checking a set against itself."""
@@ -316,7 +390,7 @@ def test_every_fixture_is_covered_by_some_independent_check() -> None:
     """
     covered = (
         set(GAP_FIXTURES) | set(RECEIPT_FIXTURES) | set(COMPAT_FIXTURES)
-        | set(DELEGATION_FIXTURES) | set(CANONICAL_FIXTURES)
+        | set(DELEGATION_FIXTURES) | set(CANONICAL_FIXTURES) | set(BUNDLE_FIXTURES)
     )
     every = _every_signed_fixture()
     uncovered = sorted(
@@ -332,5 +406,5 @@ def test_every_fixture_is_covered_by_some_independent_check() -> None:
     )
     assert (
         GAP_FIXTURES and RECEIPT_FIXTURES and COMPAT_FIXTURES
-        and DELEGATION_FIXTURES and CANONICAL_FIXTURES
+        and DELEGATION_FIXTURES and CANONICAL_FIXTURES and BUNDLE_FIXTURES
     ), "a selector matched nothing, so its checks would pass vacuously"
