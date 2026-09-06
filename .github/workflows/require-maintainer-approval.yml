@@ -27,12 +27,6 @@ jobs:
           script: |
             const MAINTAINERS = ['imran-siddique', 'lywinged'];
 
-            const author = context.payload.pull_request.user.login;
-            if (MAINTAINERS.includes(author)) {
-              core.info(`Author ${author} is a maintainer, skipping gate`);
-              return;
-            }
-
             // Both pull_request_target and pull_request_review payloads
             // carry the PR at context.payload.pull_request.
             const prNumber = context.payload.pull_request.number;

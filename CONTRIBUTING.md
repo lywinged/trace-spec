@@ -95,6 +95,11 @@ Comment periods are minimums. The project takes as much time as it needs to reac
 
 Maintainer response targets are commitments to you, not minimums. Ping the PR if one is missed.
 
+A maintainer's own pull request waits for the other maintainer's approval like any other; the
+approval gate no longer exempts maintainer authors. When one has to merge without it, a broken
+deploy, a security fix, or a conflict that would reorder other people's merges, the pull request
+says which in one line, so the record carries the reason.
+
 - Editorial PRs: reviewed within 3 business days
 - Spec change PRs: reviewed within 7 business days
 
