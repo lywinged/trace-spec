@@ -528,13 +528,44 @@ def _declared_set_universe() -> tuple[str, ...]:
     a hardcoded universe cannot contain a profile that does not exist yet, so shipping
     one left every count unchanged and every test green. Checked by mutation: adding a
     `trace-v0.3` schema to the package now widens this and fails three tests.
+
+    The probes are subtracted from rather than appended to the packaged set, because
+    the two lists can overlap exactly when the ratchet fires. A probe that ships a
+    schema appears in both and `itertools.combinations` then enumerates every subset
+    twice: measured, five members, thirty-two combinations, sixteen distinct sets. The
+    duplication is loud but misdiagnoses itself, since what fails is the readings split
+    and the conformant-set count, both of which report a number that moved while the
+    thing that moved is the universe underneath them.
     """
-    return tuple(sorted(SCHEMAED)) + UNCHECKABLE_PROBES
+    return tuple(sorted(SCHEMAED)) + tuple(
+        probe for probe in UNCHECKABLE_PROBES if probe not in SCHEMAED)
 
 
 DECLARED_SET_UNIVERSE = _declared_set_universe()
 """Four members today, so sixteen subsets: v0.1 and v0.2 from the packaged schemas,
 plus the two probes."""
+
+
+def test_the_declared_set_universe_is_a_set_and_still_has_an_uncheckable_member() -> None:
+    """Positive control on the enumeration every count below is taken over.
+
+    Two ways the universe stops being what the counts assume, neither of which any
+    other test here can see. It gains a duplicate, and the subsets are enumerated twice
+    each. Or every probe ships a schema, and "a profile this build cannot check" leaves
+    the domain entirely, taking the `unschemaed_profile_in_accepted_set` half of the
+    analysis with it while the arithmetic stays consistent.
+    """
+    universe = _declared_set_universe()
+    assert len(universe) == len(set(universe)), (
+        f"the universe repeats a member: {universe}. Every subset below is enumerated "
+        "twice and the counts double.")
+    assert [p for p in universe if p not in SCHEMAED], (
+        f"every member of {universe} is now a profile this build carries a schema for, "
+        "so no declared set here can name an uncheckable profile and the rule vectors "
+        "04 and 09 pin has no domain left. Add a probe that is still uncheckable.")
+    assert set(SCHEMAED) <= set(universe), (
+        f"positive control: {sorted(set(SCHEMAED) - set(universe))} is a packaged "
+        "profile missing from the universe")
 
 
 def _declared_sets() -> list[tuple[str, ...]]:
