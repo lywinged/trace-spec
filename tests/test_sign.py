@@ -192,7 +192,7 @@ def _fresh_record_with_profile(profile) -> dict:
 
 
 def test_verify_record_rejects_superseded_v0_1_profile():
-    """spec/trace-v0.2.md section 2: a v0.2 verifier MUST reject the v0.1 identifier.
+    """spec/trace-v0.2.md, under 'Changes from v0.1': a v0.2 verifier MUST reject v0.1.
 
     The signature is genuine; the refusal must come from the profile, not from
     tampering, or this would test the wrong check.

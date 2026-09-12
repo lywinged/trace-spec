@@ -5,7 +5,7 @@ because it is scheduled to go anywhere.
 
 **Target:** a new section in `docs/verification.md`.
 
-**Governance:** this is normative text — every requirement below uses an RFC 2119 keyword
+**Governance:** this is normative text: every requirement below uses an RFC 2119 keyword
 and would bind every implementation. Under `GOVERNANCE.md` it needs an organizational
 sponsor, or a Maintainer willing to carry it with the proposer credited. Neither has been
 sought. Nothing here is proposed for merge in its current state.

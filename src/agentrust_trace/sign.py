@@ -487,8 +487,9 @@ def verify_record(
             # is worth keeping: the generic refusal would be true but less useful.
             raise ValueError(
                 f"record carries the superseded v0.1 profile {profile!r}. "
-                "spec/trace-v0.2.md section 2: the cutover is cutover, not "
-                "coexistence — a v0.2 verifier rejects the v0.1 identifier, which "
+                "spec/trace-v0.2.md, under 'Changes from v0.1': the cutover is "
+                "cutover, not coexistence, and a v0.2 verifier rejects the v0.1 "
+                "identifier, which "
                 "was minted under a domain the project does not own."
             )
         raise ValueError(

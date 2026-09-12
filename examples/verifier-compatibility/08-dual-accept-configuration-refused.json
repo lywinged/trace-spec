@@ -1,10 +1,10 @@
 {
   "name": "dual-accept-configuration-refused",
-  "description": "A verifier configured to accept the v0.1 identifier alongside v0.2, presented with a correctly signed v0.1 record \u2014 the one case disclosed downgrade cannot save. The spec's cutover is cutover, not coexistence: the v0.1 identifier lives on a domain the project does not own, and a v0.2 verifier MUST NOT accept both, whatever its configuration claims. The configuration itself is the non-conformant object; the observable requirement is that no record verifies under it.",
+  "description": "A verifier configured to accept the v0.1 identifier alongside v0.2, presented with a correctly signed v0.1 record, the one case disclosed downgrade cannot save. The spec's cutover is cutover, not coexistence: the v0.1 identifier lives on a domain the project does not own, and a v0.2 verifier MUST NOT accept both, whatever its configuration claims. The configuration itself is the non-conformant object; the observable requirement is that no record verifies under it.",
   "profile": "trace.verifier_compatibility.proposal.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#116",
-    "status": "under review \u2014 not accepted normative text"
+    "status": "under review, not accepted normative text"
   },
   "verifier": {
     "accepted_profiles": [

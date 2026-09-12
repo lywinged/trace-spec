@@ -28,7 +28,7 @@ FUTURE = "tag:agentrust-io.com,2031:trace-v9.9"
 # The downgrade vectors need an older profile a verifier may legitimately declare.
 # That cannot be the real v0.1 identifier: the spec's cutover forbids a v0.2 verifier
 # from accepting it under any configuration, so a downgrade vector built on v0.1
-# encodes a non-conformant verifier — which an earlier revision of vector 04 did.
+# encodes a non-conformant verifier, which an earlier revision of vector 04 did.
 OLDER = "tag:example.com,2025:trace-v0.0"
 
 SEED = hashlib.sha256(b"trace-spec#116 verifier-compatibility fixture key").digest()
@@ -104,7 +104,7 @@ def fixture(
         "profile": PROFILE,
         "proposal": {
             "issue": "agentrust-io/trace-spec#116",
-            "status": "under review — not accepted normative text",
+            "status": "under review, not accepted normative text",
         },
         "verifier": {
             "accepted_profiles": accepted_profiles,
@@ -288,7 +288,7 @@ def main() -> None:
             fixture(
                 "dual-accept-configuration-refused",
                 "A verifier configured to accept the v0.1 identifier alongside v0.2, "
-                "presented with a correctly signed v0.1 record — the one case "
+                "presented with a correctly signed v0.1 record, the one case "
                 "disclosed downgrade cannot save. The spec's cutover is cutover, not "
                 "coexistence: the v0.1 identifier lives on a domain the project does "
                 "not own, and a v0.2 verifier MUST NOT accept both, whatever its "

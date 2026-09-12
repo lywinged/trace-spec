@@ -95,8 +95,8 @@ file, and the conformant outcome follows from those two alone. Vectors 04 and 09
 not, and until 2026-09-12 they did not say so.
 
 Both expect `unschemaed_profile_in_accepted_set`. That is a refusal because the verifier
-carries no schema for `tag:example.com,2025:trace-v0.0` — a fact about the implementation
-reading the vector, not about the JSON. It is true of this build and need not be true of
+carries no schema for `tag:example.com,2025:trace-v0.0`, a fact about the implementation
+reading the vector rather than about the JSON. It is true of this build and need not be true of
 yours. Measured, packaging a schema whose `eat_profile` const is that identifier: both
 vectors fail with `DID NOT RAISE`, which reads as a non-conformance when what happened
 is that the verifier grew a capability and the vector's premise lapsed.
@@ -104,7 +104,7 @@ is that the verifier grew a capability and the vector's premise lapsed.
 So the premise is now written in the file, and the adapter checks it before the outcome.
 An implementation that can check that identifier has not failed these vectors: it
 substitutes one it cannot check. The rule under test is unchanged, and it is the rule,
-not the identifier — a verifier refuses a declared set naming a profile whose shape it
+not the identifier: a verifier refuses a declared set naming a profile whose shape it
 cannot check, with an innocent record.
 
 The adapter fails rather than skips when a premise lapses, because a lapsed premise
@@ -125,5 +125,5 @@ python gen_vectors.py   # writes into examples/verifier-compatibility/
 
 Passing these vectors shows a verifier refuses what it does not implement and says what
 it verified under. It does not show the verifier implements any particular profile
-correctly, and it makes no claim about freshness, revocation, or anchoring — each of
+correctly, and it makes no claim about freshness, revocation, or anchoring, each of
 which fails independently.

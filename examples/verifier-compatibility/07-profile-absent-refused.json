@@ -4,7 +4,7 @@
   "profile": "trace.verifier_compatibility.proposal.v0",
   "proposal": {
     "issue": "agentrust-io/trace-spec#116",
-    "status": "under review \u2014 not accepted normative text"
+    "status": "under review, not accepted normative text"
   },
   "verifier": {
     "accepted_profiles": [
