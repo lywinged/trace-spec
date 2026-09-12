@@ -481,6 +481,16 @@ def test_recorded_shortfalls_have_not_closed() -> None:
             "Remove the entry and record what closed it."
         )
     assert SHORTFALLS, "positive control: an empty shortfall list asserts nothing"
+    # The loop above fires only once some vector separates the entry, and no vector
+    # here exercises a second profile, so shipping one would not move it. The entry's
+    # stated expiry has to be asserted directly or the ratchet names a condition it
+    # does not watch.
+    assert len(_conformant_declared_sets()) == 1, (
+        "the recorded shortfall's stated expiry has arrived: more than one declared "
+        f"set is now conformant ({_conformant_declared_sets()}), so a conformant run "
+        "has more than one profile to report and a literal is no longer "
+        "indistinguishable from an observation. Write the vector that separates "
+        "'obligations 2 and 3, statement hardcoded' and remove the entry.")
 
 
 def test_every_panel_entry_is_either_caught_or_a_recorded_shortfall() -> None:
@@ -493,50 +503,43 @@ def test_every_panel_entry_is_either_caught_or_a_recorded_shortfall() -> None:
         f"as shortfalls: {sorted(silent)}")
 
 
-def test_exactly_one_declared_set_is_conformant_today() -> None:
-    """The fact every recorded shortfall reduces to, enumerated rather than argued.
+DECLARED_SET_UNIVERSE = (
+    V2, V01, "tag:example.com,2025:trace-v0.0", "tag:agentrust-io.com,2031:trace-v9.9")
+"""A profile of each kind a declared set could name: current, superseded, an unschemaed
+third party, an unschemaed future. Sixteen subsets."""
 
-    While this returns one, obligation 3's statement content is untestable: a
-    conformant run has one profile to report and one declared set to report, so a
-    literal cannot be told from an observation. It is also why obligations 1 and 4
-    were deferred on #116, and why the rule against a superseded identifier in the
-    declared set cannot be separated from the rule against an unschemaed one.
-    """
-    universe = [V2, V01, "tag:example.com,2025:trace-v0.0",
-                "tag:agentrust-io.com,2031:trace-v9.9"]
-    subsets = [c for r in range(len(universe) + 1)
-               for c in itertools.combinations(universe, r)]
-    assert len(subsets) == 16, "positive control: the enumeration is not running"
 
-    def conformant(accepted: tuple[str, ...]) -> bool:
+def _declared_sets() -> list[tuple[str, ...]]:
+    return [c for r in range(len(DECLARED_SET_UNIVERSE) + 1)
+            for c in itertools.combinations(DECLARED_SET_UNIVERSE, r)]
+
+
+def _conformant_declared_sets() -> list[list[str]]:
+    out = []
+    for combo in _declared_sets():
         try:
-            _set_integrity(list(accepted))
-            return True
+            _set_integrity(list(combo))
         except Refused:
-            return False
-
-    ok = [list(c) for c in subsets if conformant(c)]
-    assert ok == [[V2]], (
-        f"the conformant declared sets are now {ok}. More than one means the "
-        "shortfalls recorded above may have expired; fewer means nothing verifies.")
+            continue
+        out.append(list(combo))
+    return out
 
 
 def test_the_two_declared_set_rules_are_independently_observable() -> None:
     """Vectors 09 and 10 pin different rules, and this is what proves it.
 
     They look like duplicates: both put an inadmissible entry first in the declared
-    set, both expect a refusal, both are caught by the same three panel entries. The
-    question is whether an implementation can hold one rule and drop the other, and
-    the answer turns on a fact that has to be read out of the build rather than
-    assumed: `trace-v0.1.json` ships, so the v0.1 identifier is a profile this build
-    can check. The rule forbidding it in a declared set is therefore not a special
-    case of the rule requiring every member to be checkable.
+    set, both expect a refusal. The question is whether an implementation can hold one
+    rule and drop the other, and the answer turns on a fact that has to be read out of
+    the build rather than assumed: `trace-v0.1.json` ships, so the v0.1 identifier is a
+    profile this build can check. The rule forbidding it in a declared set is therefore
+    not a special case of the rule requiring every member to be checkable.
 
     This test asserted the opposite when it was written, and passed, because the panel
     restated the schema-coverage set as a literal instead of reading
     `profiles_with_schema()`. Both sides of the comparison came from the same wrong
-    constant. Recorded here because it is the defect the issue is about, committed by
-    the module written to detect it.
+    constant. Kept here because it is the defect issue 116 is about, committed by the
+    module written to detect it.
     """
     fixtures = _fixtures()
 
@@ -581,6 +584,45 @@ def test_the_two_declared_set_rules_are_independently_observable() -> None:
     assert not (dropped_v01 & dropped_coverage), (
         "the two rules are caught by the same vectors, so the set cannot tell them "
         "apart and should not be read as testing two")
+
+
+def test_membership_is_never_the_sole_cause_of_a_refusal() -> None:
+    """Obligation 2 as issue 116 words it, and what it is observable through.
+
+    The issue says a verifier "declares the set of versions it supports and MUST refuse
+    versions outside that set", which is a membership test. A vector isolates that rule
+    only where membership refuses and every other rule accepts. There is no such
+    declared set: a record outside the set is already schema-invalid, since the const
+    admits one profile, and the empty set is refused by its own rule first.
+
+    Every row of the set that pins obligation 2 therefore pins a constraint on the
+    declared set, which is stronger than the sentence in the issue. Recorded here so
+    that the claim is reproducible rather than asserted in a thread.
+    """
+    sets = _declared_sets()
+    assert len(sets) == 16, "positive control: the enumeration is not running"
+    # The record is necessarily v0.2: the const admits no other schema-valid record.
+    isolating = [list(c) for c in sets
+                 if V2 not in c and list(c) in _conformant_declared_sets()]
+    assert not isolating, (
+        f"membership is now isolable in {isolating}, so obligation 2 as worded has a "
+        "vector of its own and the stronger reading is no longer the only testable one")
+
+
+def test_exactly_one_declared_set_is_conformant_today() -> None:
+    """The fact the recorded shortfall reduces to, enumerated rather than argued.
+
+    While this returns one, obligation 3's statement content is untestable: a conformant
+    run has one profile to report and one declared set to report, so a literal cannot be
+    told from an observation. The same enumeration is what
+    `test_recorded_shortfalls_have_not_closed` watches, and it is kept in one place so
+    the two cannot disagree about what conformant means.
+    """
+    assert len(_declared_sets()) == 16, "positive control: the enumeration is not running"
+    ok = _conformant_declared_sets()
+    assert ok == [[V2]], (
+        f"the conformant declared sets are now {ok}. More than one means the shortfall "
+        "recorded above has expired; fewer means nothing verifies.")
 
 
 # Nominal margin and separating margin, per rule this set names. `KNOWN_THIN` in
