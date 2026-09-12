@@ -23,12 +23,12 @@ silent.
 | `01-known-version-verified.json` | verified | The statement names the profile verification ran under. |
 | `02-unknown-version-refused.json` | refused | A future profile is refused, not best-effort verified. |
 | `03-superseded-version-refused.json` | refused | The v0.1 identifier, which `spec/trace-v0.2.md` requires a v0.2 verifier to reject. |
-| `04-unschemaed-profile-refused.json` | refused | A verifier declaring a profile it carries no schema for, given an ordinary v0.2 record. The record is innocent; the configuration is the defect, which is what makes this vector separate at all. It read `verified, downgraded` until the set was measured. |
+| `04-unschemaed-profile-refused.json` | refused | A verifier declaring a profile it carries no schema for, given an ordinary v0.2 record. The record is innocent; the configuration is the defect, which is what makes this vector separate at all. It read `verified, downgraded` until the set was measured. Carries a `preconditions` block: see below. |
 | `05-downgrade-silent-is-impossible.json` | refused | The same record where the older profile was never declared. Silent fallback has no outcome. |
 | `06-empty-accepted-set-refused.json` | refused | An empty set means "nothing", never "anything". |
 | `07-profile-absent-refused.json` | refused | A missing profile cannot be supplied by assumption. |
 | `08-dual-accept-configuration-refused.json` | refused | A verifier declaring both v0.2 and v0.1, given a correctly signed v0.1 record. The spec's cutover forbids the configuration itself ("MUST NOT accept both"); the observable requirement is that nothing verifies under it. An earlier revision of vector 04 used v0.1 as its downgrade target and thereby encoded exactly this non-conformant verifier as a positive case. |
-| `09-unschemaed-profile-first-in-set-refused.json` | refused | The same defect as 04 with the unusable entry first in the declared set. Every declared profile has to be checked, not one of them; an implementation reading only the head or only the tail agrees with one of the pair and not the other. |
+| `09-unschemaed-profile-first-in-set-refused.json` | refused | The same defect as 04 with the unusable entry first in the declared set. Every declared profile has to be checked, not one of them; an implementation reading only the head or only the tail agrees with one of the pair and not the other. Carries the same `preconditions` block. |
 | `10-superseded-first-in-set-innocent-record-refused.json` | refused | The same configuration defect as 08, with the v0.1 identifier first in the accepted set and an ordinary v0.2 record presented against it. Both changes carry weight: an implementation scanning only the tail of its accepted set passes 08 and fails here, and the innocent record is what lets this vector separate, since 08's v0.1 record is refused by the schema whether or not any profile rule ran. |
 | `11-empty-profile-string-refused.json` | refused | The profile claim is present and empty. 07 removes the member outright, so an implementation testing `"eat_profile" not in record` passes 07 and reads this as an unrecognised profile, or as absent and therefore current. A claim that is present and says nothing is not a claim. |
 
@@ -57,7 +57,9 @@ Nothing in a fixture names a language or an API:
                | "superseded_profile_refused" | "superseded_profile_in_accepted_set"
                | "unschemaed_profile_in_accepted_set",
     "statement": null | { "profile": "...", "accepted_profiles": [...] }
-  }
+  },
+  // Present on 04 and 09 only. See "What two vectors assume about you" below.
+  "preconditions": { "unschemaed_for_the_verifier_under_test": ["..."], "why": "..." }
 }
 ```
 
@@ -72,6 +74,29 @@ cannot fail, is a claim to test obligation 4 that this set does not make good on
 `tests/test_verifier_compatibility_fixtures.py` is the adapter that runs these against
 `agentrust_trace`. Another implementation writes its own adapter and runs the same JSON;
 that is the point of keeping the expectations out of the test code.
+
+## What two vectors assume about you
+
+Nine of the eleven are self-contained: the record and the declared set are both in the
+file, and the conformant outcome follows from those two alone. Vectors 04 and 09 are
+not, and until 2026-09-12 they did not say so.
+
+Both expect `unschemaed_profile_in_accepted_set`. That is a refusal because the verifier
+carries no schema for `tag:example.com,2025:trace-v0.0` — a fact about the implementation
+reading the vector, not about the JSON. It is true of this build and need not be true of
+yours. Measured, packaging a schema whose `eat_profile` const is that identifier: both
+vectors fail with `DID NOT RAISE`, which reads as a non-conformance when what happened
+is that the verifier grew a capability and the vector's premise lapsed.
+
+So the premise is now written in the file, and the adapter checks it before the outcome.
+An implementation that can check that identifier has not failed these vectors: it
+substitutes one it cannot check. The rule under test is unchanged, and it is the rule,
+not the identifier — a verifier refuses a declared set naming a profile whose shape it
+cannot check, with an innocent record.
+
+The adapter fails rather than skips when a premise lapses, because a lapsed premise
+means the rule stopped being tested and a set that quietly stops testing a rule still
+reports green.
 
 ## Regenerating
 

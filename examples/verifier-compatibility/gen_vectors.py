@@ -84,8 +84,21 @@ def fixture(
     record_profile: str,
     accepted_profiles: list[str],
     expected: dict[str, Any],
+    preconditions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    """One vector. *preconditions*, where present, states what has to be true of the
+    verifier under test for the expectation below to be the conformant answer.
+
+    Most vectors need none: the outcome follows from the record and the declared set
+    alone, both of which are in the file. Two do. `unschemaed_profile_in_accepted_set`
+    is a refusal because the *verifier* carries no schema for the named profile, which
+    is a fact about the implementation reading the vector and not about the JSON. The
+    identifier those two carry is uncheckable for the reference implementation and
+    might not be for another one, so it is written down as a premise the adapter
+    checks rather than left as an assumption the adapter would report as a
+    non-conformance.
+    """
+    out = {
         "name": name,
         "description": description,
         "profile": PROFILE,
@@ -102,6 +115,9 @@ def fixture(
         "record": signed_record(record_profile),
         "expected": expected,
     }
+    if preconditions is not None:
+        out["preconditions"] = preconditions
+    return out
 
 
 def main() -> None:
@@ -166,7 +182,11 @@ def main() -> None:
             fixture(
                 "unschemaed-profile-refused",
                 "The verifier declares support for an older profile it carries no "
-                "schema for, and the record uses it. Refused at configuration, not at "
+                "schema for. The record does not use it and does not need to: the "
+                "first sentence of this description said it did until 2026-09-12, "
+                "contradicting the sentence three lines below that says the record is "
+                "an ordinary v0.2 record, which it is and always was. Refused at "
+                "configuration, not at "
                 "the record: a verifier can only honestly accept a profile whose shape "
                 "it can check, and declaring more than that is a claim it cannot make. "
                 "The record is an ordinary v0.2 record and nothing about it is wrong, "
@@ -185,6 +205,18 @@ def main() -> None:
                     "outcome": "refused",
                     "failure": "unschemaed_profile_in_accepted_set",
                     "statement": None,
+                },
+                preconditions={
+                    "unschemaed_for_the_verifier_under_test": [OLDER],
+                    "why": "The expectation is a refusal because the verifier carries "
+                    "no schema for this profile. That is a fact about the "
+                    "implementation running the vector, not about this file, so it is "
+                    "stated here rather than assumed. An implementation that does "
+                    "carry a schema for this identifier has not failed the vector: the "
+                    "premise no longer holds for it, and it substitutes an identifier "
+                    "of its own that it cannot check. The rule under test is that a "
+                    "verifier refuses a declared set naming a profile whose shape it "
+                    "cannot check, with an innocent record.",
                 },
             ),
         ),
@@ -221,6 +253,18 @@ def main() -> None:
                     "outcome": "refused",
                     "failure": "unschemaed_profile_in_accepted_set",
                     "statement": None,
+                },
+                preconditions={
+                    "unschemaed_for_the_verifier_under_test": [OLDER],
+                    "why": "The expectation is a refusal because the verifier carries "
+                    "no schema for this profile. That is a fact about the "
+                    "implementation running the vector, not about this file, so it is "
+                    "stated here rather than assumed. An implementation that does "
+                    "carry a schema for this identifier has not failed the vector: the "
+                    "premise no longer holds for it, and it substitutes an identifier "
+                    "of its own that it cannot check. The rule under test is that a "
+                    "verifier refuses a declared set naming a profile whose shape it "
+                    "cannot check, with an innocent record.",
                 },
             ),
         ),

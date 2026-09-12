@@ -11,8 +11,14 @@ sponsor, or a Maintainer willing to carry it with the proposer credited. Neither
 sought. Nothing here is proposed for merge in its current state.
 
 **Conformance vectors** for these requirements already exist and need no sponsor:
-`examples/verifier-compatibility/`, seven fixtures, run by
+`examples/verifier-compatibility/`, eleven fixtures, run by
 `tests/test_verifier_compatibility_fixtures.py`.
+
+*Correction, 2026-09-12:* this said seven, which was the count when the paragraph was
+written and had been wrong since the set grew. The number is now asserted against the
+directory by `test_verifier_compatibility_fixtures.py`, so it cannot drift again
+silently. Two of the eleven, 04 and 09, carry a `preconditions` block stating what has
+to be true of the verifier running them; see that directory's README.
 
 ---
 

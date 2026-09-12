@@ -58,5 +58,11 @@
     "outcome": "refused",
     "failure": "unschemaed_profile_in_accepted_set",
     "statement": null
+  },
+  "preconditions": {
+    "unschemaed_for_the_verifier_under_test": [
+      "tag:example.com,2025:trace-v0.0"
+    ],
+    "why": "The expectation is a refusal because the verifier carries no schema for this profile. That is a fact about the implementation running the vector, not about this file, so it is stated here rather than assumed. An implementation that does carry a schema for this identifier has not failed the vector: the premise no longer holds for it, and it substitutes an identifier of its own that it cannot check. The rule under test is that a verifier refuses a declared set naming a profile whose shape it cannot check, with an innocent record."
   }
 }
