@@ -63,6 +63,8 @@ from __future__ import annotations
 import itertools
 import json
 import pathlib
+import sys
+from unittest import mock
 
 import pytest
 
@@ -847,23 +849,41 @@ def _stronger_reading(accepted: list[str], record: dict, jwk: dict) -> tuple[str
     return "verified", None
 
 
-def _readings_split(universe_size: int) -> dict[str, int]:
+def _admissible() -> tuple[str, ...]:
+    """The profiles `_set_integrity` lets a declared set contain: schemaed, not v0.1."""
+    return tuple(sorted(p for p in SCHEMAED if p != V01))
+
+
+def _readings_split(universe: int, admissible: int) -> dict[str, int]:
     """How the two readings of obligation 2 divide the declared sets, in closed form.
 
     These were three literals, 7 and 8 and 1 over sixteen sets, and they read as a
-    measurement. They are not one. Every set containing v0.2 verifies under membership,
-    and of those exactly one, `[v0.2]` itself, survives `_set_integrity`, so the two
-    readings give opposite verdicts on `2**(n-1) - 1` sets out of `2**n`, always. The
-    figure is fixed by how many probes `UNCHECKABLE_PROBES` happens to carry and says
-    nothing about #116, the vector set, or which reading is right: one probe gives
-    3 of 8, five probes give 63 of 128. Verified against the enumeration at every
-    universe size from two to seven by
+    measurement. They are not one. Membership verifies exactly the sets containing v0.2,
+    of which there are `2**(u-1)`; the stronger reading verifies those that are also
+    subsets of the admissible profiles, of which there are `2**(a-1)`. So the two give
+    opposite verdicts on the difference, agree with different reasons on one more than
+    that, and agree identically on `2**a - 1`.
+
+    Neither `u` nor `a` says anything about #116, the vector set, or which reading is
+    right. `u` is how many entries `UNCHECKABLE_PROBES` happens to carry, a choice made
+    in this file: one probe gives 3 of 8, five give 63 of 128. `a` is how many usable
+    profile schemas the build packages, which is the `SHORTFALLS` entry's own expiry
+    condition. Verified against the enumeration at eight combinations of the two by
     `test_the_readings_split_is_arithmetic_not_a_measurement`.
 
-    What the enumeration does establish is the direction, which is universe-independent
-    and is the claim the ruling turns on: wherever they disagree, membership verifies
-    and the stronger reading refuses. A vector saying `refused` takes the stronger
-    reading's side, so the choice between the two cannot be deferred past the fixtures.
+    This took one argument until an hour after it was written, and read `2**(u-1) - 1`
+    with "always" attached. That form is right only while exactly one declared set is
+    conformant, which is today and is the condition `SHORTFALLS` is waiting to see end.
+    Packaging upstream's `schema/trace-claim-v0.3-draft.json`, which exists on main
+    today from #277 and is not packaged, takes `a` to 2 and the figure to 14 of 32. The
+    defect was the scope of the word rather than the arithmetic, and it was caught by
+    running the mutation rather than by re-checking the sum.
+
+    What the enumeration does establish is the direction, which holds at every `u` and
+    `a` and is the claim the ruling turns on: wherever they disagree, membership
+    verifies and the stronger reading refuses. A vector saying `refused` takes the
+    stronger reading's side, so the choice between the two cannot be deferred past the
+    fixtures.
 
     An earlier version of this module instead asserted that membership is never the sole
     cause of a refusal, and proved it by filtering the sets through `_set_integrity`
@@ -873,13 +893,13 @@ def _readings_split(universe_size: int) -> dict[str, int]:
     them.
     """
     return {
-        "opposite verdicts": 2 ** (universe_size - 1) - 1,
-        "same verdict, different reason": 2 ** (universe_size - 1),
-        "identical": 1,               # only [v0.2] itself
+        "opposite verdicts": 2 ** (universe - 1) - 2 ** (admissible - 1),
+        "same verdict, different reason": 2 ** (universe - 1) - 2 ** (admissible - 1) + 1,
+        "identical": 2 ** admissible - 1,
     }
 
 
-READINGS = _readings_split(len(DECLARED_SET_UNIVERSE))
+READINGS = _readings_split(len(DECLARED_SET_UNIVERSE), len(_admissible()))
 
 
 def test_the_two_readings_of_obligation_2_are_mutually_exclusive() -> None:
@@ -937,29 +957,41 @@ def test_the_readings_split_is_arithmetic_not_a_measurement() -> None:
     fixture = _fixtures()["01-known-version-verified"]
     record, jwk = fixture["record"], fixture["trusted_key"]
     seen = {}
-    for probe_count in range(6):
+    for extra_schemas, probe_count in ((0, 0), (0, 1), (0, 2), (0, 3),
+                                       (1, 0), (1, 2), (2, 2), (3, 1)):
+        extra = {f"tag:example.test,2026:readings-schema-{i}" for i in range(extra_schemas)}
         probes = tuple(f"tag:example.test,2026:readings-probe-{i}" for i in range(probe_count))
-        assert not set(probes) & set(SCHEMAED), "a synthetic probe collided with a real profile"
-        universe = tuple(sorted(SCHEMAED)) + probes
-        tally = dict.fromkeys(READINGS, 0)
-        for size in range(len(universe) + 1):
-            for combo in itertools.combinations(universe, size):
-                accepted = list(combo)
-                m_outcome, m_reason = _membership_only(accepted, record, jwk)
-                s_outcome, s_reason = _stronger_reading(accepted, record, jwk)
-                if m_outcome != s_outcome:
-                    tally["opposite verdicts"] += 1
-                elif m_reason != s_reason:
-                    tally["same verdict, different reason"] += 1
-                else:
-                    tally["identical"] += 1
-        assert tally == _readings_split(len(universe)), (
-            f"universe of {len(universe)}: the closed form says "
-            f"{_readings_split(len(universe))} and the enumeration says {tally}")
-        seen[len(universe)] = tally["opposite verdicts"]
-    assert seen == {2: 1, 3: 3, 4: 7, 5: 15, 6: 31, 7: 63}, (
-        f"positive control: the disagreement count is supposed to double with each "
-        f"added probe and here it went {seen}")
+        assert not extra & set(probes), "a synthetic schema collided with a synthetic probe"
+        # The schemaed set is built from V2 and V01 outright rather than from whatever
+        # the build packages, so the pairs below are exactly the ones named in the
+        # control and shipping a real second schema does not fail this test with a
+        # message about arithmetic. What the build packages is watched by
+        # `test_exactly_one_declared_set_is_conformant_today` and by the ratchet.
+        schemaed = frozenset({V2, V01}) | extra
+        universe = tuple(sorted(schemaed)) + probes
+        admissible = tuple(p for p in schemaed if p != V01)
+        with mock.patch.object(sys.modules[__name__], "SCHEMAED", schemaed):
+            tally = dict.fromkeys(READINGS, 0)
+            for size in range(len(universe) + 1):
+                for combo in itertools.combinations(universe, size):
+                    accepted = list(combo)
+                    m_outcome, m_reason = _membership_only(accepted, record, jwk)
+                    s_outcome, s_reason = _stronger_reading(accepted, record, jwk)
+                    if m_outcome != s_outcome:
+                        tally["opposite verdicts"] += 1
+                    elif m_reason != s_reason:
+                        tally["same verdict, different reason"] += 1
+                    else:
+                        tally["identical"] += 1
+        want = _readings_split(len(universe), len(admissible))
+        assert tally == want, (
+            f"universe {len(universe)}, admissible {len(admissible)}: the closed form "
+            f"says {want} and the enumeration says {tally}")
+        seen[(len(universe), len(admissible))] = tally["opposite verdicts"]
+    assert seen == {(2, 1): 1, (3, 1): 3, (4, 1): 7, (5, 1): 15,
+                    (3, 2): 2, (5, 2): 14, (6, 3): 28, (6, 4): 24}, (
+        f"positive control: the disagreement count is supposed to move with both "
+        f"quantities, and here it went {seen}")
 
 
 def test_the_committed_fixtures_already_take_the_stronger_reading() -> None:
