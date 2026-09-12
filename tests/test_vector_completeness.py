@@ -1,44 +1,53 @@
 """Completeness checks over the conformance vector sets.
 
-The other modules ask whether the vectors are *correct*. This one asks whether they are
-*complete*: does every obligation the verifier implements have vectors that notice when
-the obligation is gone — and notice it from more than one direction?
+`test_action_receipt_fixtures.py` asks whether the vectors are *correct*. This module
+asks whether they are *complete*: does every obligation the verifier implements have
+vectors that notice when the obligation is gone, and notice it from more than one
+direction?
 
-The rule inventory is ``RULES``, the registry the verifier itself consumes. An earlier
-revision recovered the inventory from the verifier's source with ``ast``, and upstream
-#124's review identified the failure mode this creates: a rule written as
-``failures.extend([...])``, ``+=``, an f-string or a named constant is invisible to the
-walk, and the suite reports complete coverage over an inventory that is quietly missing
-entries. The registry inverts that. A check that is not registered never runs, so it
-cannot silently exist outside the inventory; and ``test_no_emission_outside_the_registry``
-is the residual guard for code that would try to emit around the registry.
+The rule inventory is ``RULES``, the registry the verifier itself consumes. A
+hand-maintained rule list drifts when someone forgets to extend it; an inventory
+recovered from the verifier's source by AST search has the mirror failure: a rule
+written as ``extend([...])``, ``+=``, an f-string or a named constant is invisible to
+the walk, and the suite reports complete coverage over an inventory that is quietly
+missing entries (#124). The registry inverts that: a check that is not registered
+never runs, so it cannot silently exist outside the inventory, and
+``test_no_emission_outside_the_registry`` is the residual guard for code that would
+try to emit around it.
 
 Mutation therefore targets **named rule hooks**: a rule is deleted by rebuilding the
-registry without its entry, or weakened by substituting its check — never by pattern-
-matching source text. Same review, same reason: mutate what the verifier actually
-consumes, so the mutation cannot drift away from the code under test.
+registry without its entry, or weakened by substituting its check: never by
+pattern-matching source text, so the mutation cannot drift away from the code under
+test.
 
 The questions, in increasing strength:
 
 1. Does any fixture expect a code the registry cannot produce? (dead expectations)
 2. Is every registered rule exercised by some fixture? (unexercised rules)
-3. Does deleting each rule change at least **two** fixtures' outcomes? (#124: single-
-   vector coverage has no margin — one fixture weakened or renamed away silently
-   removes a rule's coverage)
-4. Are two of those fixtures **independent** — is there a single plausible
-   implementation defect that one catches and the other misses? Two copies of the same
-   vector satisfy question 3 and fail this one.
+3. Does deleting each rule change at least **two** fixtures' outcomes? (#124:
+   single-vector coverage has no margin: one fixture weakened or renamed away
+   silently removes a rule's coverage)
+4. Are two of those fixtures **independent**: is there a single plausible
+   implementation defect that one catches and the other misses? Two copies of the
+   same vector satisfy question 3 and fail this one.
 5. Has any rule's margin dropped below what it was? (silent thinning)
+6. Is each vector still the one doing the discriminating? (silent substitution)
 
-Independence is #124's definition made executable. For every rule, ``DEFECTS`` declares
-at least one *weakened* variant of its check, each modelling a real implementation
-shortcut: comparing digest prefixes, case-insensitive identifier matching, structural
-signature validation without cryptography, clock-skew tolerances. A rule's vectors are
-independent when some declared defect deviates at least one of them from its expected
-outcome while leaving another undisturbed. The declaration is fail-closed: a registered
-rule with no defect entry fails the suite, so the question "what bug would your second
-vector catch that your first would not?" has to be answered when the rule is added,
-not after a regression demonstrates it.
+Independence is #124's definition made executable. For every rule, ``DEFECTS``
+declares at least one *weakened* variant of its check, each modelling a real
+implementation shortcut: comparing digest prefixes, case-insensitive identifier
+matching, structural signature validation without cryptography, clock-skew
+tolerances. A rule's vectors are independent when some declared defect deviates at
+least one of them from its expected outcome while leaving another undisturbed. The
+declaration is fail-closed: a registered rule with no defect entry fails the suite,
+so the question "what bug would your second vector catch that your first would not?"
+has to be answered when the rule is added, not after a regression demonstrates it.
+
+Question 5 counts and question 6 names. A margin is a set of fixture names reduced to
+its size, so a change that keeps the size and moves the work is invisible to it:
+rewriting a vector into a copy of its partner still leaves the count at two.
+``vector_roles.json`` records which fixture carries which discrimination, so that
+substitution fails by name instead of passing.
 """
 
 from __future__ import annotations
@@ -69,6 +78,7 @@ TESTS_DIR = Path(__file__).parent
 VERIFIER_MODULE = TESTS_DIR / "test_action_receipt_fixtures.py"
 FIXTURE_DIR = TESTS_DIR.parent / "examples" / "action-receipts" / "conformance"
 MARGINS_FILE = TESTS_DIR / "vector_margins.json"
+ROLES_FILE = TESTS_DIR / "vector_roles.json"
 FIXTURES = discover_fixtures(FIXTURE_DIR)
 
 RULE_CODES = tuple(rule.code for rule in RULES)
@@ -86,7 +96,7 @@ def _hash_prefix(value: str) -> str:
 
 
 def _ci_lookup(fixture: dict[str, Any], signed: dict[str, Any]) -> dict[str, str] | None:
-    """A key lookup that normalises case — the classic 'be liberal' shortcut."""
+    """A key lookup that normalises case: the classic 'be liberal' shortcut."""
     wanted = signed["issuer_key_id"].lower()
     for key_id, jwk in fixture["trusted_issuer_keys"].items():
         if key_id.lower() == wanted:
@@ -112,7 +122,7 @@ DEFECTS: dict[str, dict[str, Check]] = {
     "receipt_missing": {
         "treats_explicit_null_as_present": lambda f: "receipt" not in f,
     },
-    # Digest comparisons shortened to a prefix — log-friendly truncation that leaks
+    # Digest comparisons shortened to a prefix: log-friendly truncation that leaks
     # into the comparison.
     "action_ref_invalid": {
         "compares_truncated_digest": lambda f: _hash_prefix(_recomputed_action_ref(f))
@@ -155,7 +165,13 @@ DEFECTS: dict[str, dict[str, Check]] = {
         ].lower()
         != "none",
     },
-    # A signature check that stops at well-formedness.
+    # A signature check that stops at well-formedness. `04` is the only vector whose
+    # issuer key the verifier holds and whose 64-byte signature still fails to verify;
+    # `14` and `23` fail for want of a key, `24` for length. A single key can produce
+    # that shape by corrupting a signature at fixed length; what it cannot produce is a
+    # signature by a key the verifier does not hold, which is what `04` models. This
+    # check sees the shape, not the signer, so the second key #178 asks for is a
+    # decision the reissue makes on purpose.
     "signature_or_key_mismatch": {
         "checks_structure_only": lambda f: _trusted_jwk(f, f["receipt"]) is not None
         and _sig_malformed(f["receipt"]),
@@ -360,7 +376,7 @@ def test_no_emission_outside_the_registry() -> None:
 def test_registry_codes_are_literals() -> None:
     """Every `Rule(...)` names its code as a string literal.
 
-    Not needed at runtime — the imported registry is the ground truth either way —
+    Not needed at runtime, the imported registry is the ground truth either way,
     but a computed code would make the registry unreadable in review, and reviewability
     is half of what the registry is for.
     """
@@ -398,7 +414,7 @@ def test_no_fixture_expects_a_code_the_registry_cannot_emit() -> None:
     orphans = _codes_expected_by_fixtures() - set(RULE_CODES) - {"receipt_gap_disclosed"}
     assert not orphans, (
         f"fixtures expect codes no registered rule produces: {sorted(orphans)}. "
-        "Either the rule was removed and the fixture kept, or the code is misspelled — "
+        "Either the rule was removed and the fixture kept, or the code is misspelled: "
         "in both cases the fixture is no longer testing anything."
     )
 
@@ -432,7 +448,7 @@ def test_each_rule_is_load_bearing_for_two_fixtures(code: str) -> None:
     """Deleting an obligation must change at least two fixtures' outcomes.
 
     One is existence; two is margin. With a single load-bearing vector, any change
-    that weakens or retires that vector silently removes the rule's coverage — the
+    that weakens or retires that vector silently removes the rule's coverage: the
     failure mode #124 exists to close. A rule here has margin two only if both
     vectors independently notice its deletion, so a vector that merely *names* the
     rule while another rule fires on its input does not count.
@@ -449,7 +465,7 @@ def test_every_rule_declares_a_defect() -> None:
     """Fail closed: registering a rule requires declaring what its second vector adds.
 
     A rule with no weakened variant cannot demonstrate that its vectors are
-    independent rather than copies, so the declaration is part of adding the rule —
+    independent rather than copies, so the declaration is part of adding the rule:
     the mirror of the registry requirement on the verifier side.
     """
     missing = sorted(set(RULE_CODES) - set(DEFECTS))
@@ -482,7 +498,7 @@ def test_vectors_for_each_rule_are_independent(code: str) -> None:
     assert separations, (
         f"no declared defect separates the vectors for {code!r}: every weakening "
         f"either fools all of {sorted(bearing)} or none of them. The vectors are "
-        "mutually redundant — author one that catches a defect the others miss, or "
+        "mutually redundant: author one that catches a defect the others miss, or "
         "declare a defect that tells them apart."
     )
 
@@ -495,16 +511,19 @@ def test_vectors_for_each_rule_are_independent(code: str) -> None:
 def test_margins_have_not_thinned() -> None:
     """A ratchet above the floor: coverage may not silently get thinner.
 
-    The floor is two. Anything above it that exists today — a rule three or four
-    fixtures notice — may not quietly decay back toward the floor: lowering a
+    The floor is two. Anything above it that exists today: a rule three or four
+    fixtures notice: may not quietly decay back toward the floor: lowering a
     recorded margin is a decision someone has to make on purpose, in the same commit,
     with a reason. Raising one is an ordinary PR.
     """
     current = {code: len(_margin(code)) for code in RULE_CODES}
 
-    if not MARGINS_FILE.exists():
-        MARGINS_FILE.write_text(json.dumps(current, indent=2, sort_keys=True) + "\n")
-        pytest.skip(f"recorded initial margins to {MARGINS_FILE.name}; re-run to enforce")
+    assert MARGINS_FILE.exists(), (
+        f"{MARGINS_FILE.name} is missing, so there is nothing to ratchet against. A guard "
+        "that rebuilds its own baseline from the current tree records whatever the tree "
+        "has just lost. Restore the file from history; to rebaseline on purpose, write "
+        "the current margins to it in the same commit that changes the fixtures, and say why."
+    )
 
     recorded: dict[str, int] = json.loads(MARGINS_FILE.read_text(encoding="utf-8"))
     thinned = {
@@ -523,4 +542,105 @@ def test_margins_have_not_thinned() -> None:
     assert not vanished, (
         f"rules that had recorded margins no longer exist: {vanished}. If they were "
         f"removed on purpose, drop them from {MARGINS_FILE.name} in the same commit."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. The role ratchet
+# ---------------------------------------------------------------------------
+
+
+def _roles() -> dict[str, dict[str, list[str]]]:
+    """Per fixture: the rules it is load-bearing for, and the defects it separates.
+
+    The same measurement questions 3 and 4 make, keyed by fixture rather than by rule.
+    `_margin` returns a set and the ratchet stores only its size, so neither can see
+    which fixture is doing the work. This asks whether a given vector still does the
+    job it was written for.
+    """
+    roles: dict[str, dict[str, list[str]]] = {}
+    for code in RULE_CODES:
+        bearing = _margin(code)
+        for name in bearing:
+            roles.setdefault(name, {}).setdefault(code, [])
+        for defect, weakened_check in DEFECTS[code].items():
+            for name in sorted(_deviating(_weakened(code, weakened_check)) & bearing):
+                roles[name][code].append(defect)
+    return roles
+
+
+def test_no_vector_has_lost_its_role() -> None:
+    """A ratchet on identity: a vector may not quietly stop discriminating.
+
+    Margins count, and a count cannot see work moving between vectors. Rewriting a
+    vector into a copy of its partner leaves the rule's margin at two, and
+    `test_vectors_for_each_rule_are_independent` still passes whenever some other
+    declared defect happens to separate the pair. What is lost is the specific
+    property the vector was written to exercise, and nothing recorded which vector
+    carried it.
+
+    The case this is built for is #178, reissuing fixtures 01-09 from a key whose
+    private half is published. Exactly one of the nine carries a discrimination: `04`
+    is the only vector whose issuer key the verifier holds and whose 64-byte signature
+    still fails to verify, so it catches `checks_structure_only` while `24`, whose
+    signature is the wrong length, does not. What this test holds is that shape. A
+    single-key reissue that collapses `04` to the wrong length, or renames it, fails
+    here by name; one that corrupts the signature at fixed length passes, because the
+    shape survives even though the fixture no longer models a wrong signer. The second
+    published key #178 asks for is therefore a decision the reissue makes on purpose,
+    and this test says so about the shape, not about the signer.
+
+    Six of the remaining eight record as load-bearing with no defect of their own,
+    which is what they are: their partners in 17-30 carry the discrimination. `01` and
+    `02` are the other two, and they are absent from the file altogether, because they
+    are the valid vectors and deleting a rule does not change the outcome of a fixture
+    that passes.
+
+    Gaining a role is an ordinary PR. Losing one is a decision someone makes on
+    purpose, in the same commit, with a reason.
+    """
+    current = _roles()
+
+    assert ROLES_FILE.exists(), (
+        f"{ROLES_FILE.name} is missing, so there is nothing to ratchet against. A guard "
+        "that rebuilds its own baseline from the current tree records whatever the tree "
+        "has just lost. Restore the file from history; to rebaseline on purpose, write "
+        "_roles() to it in the same commit that changes the fixtures, and say why."
+    )
+
+    recorded: dict[str, dict[str, list[str]]] = json.loads(
+        ROLES_FILE.read_text(encoding="utf-8")
+    )
+
+    # Each way of losing a role gets its own reason. They are three different
+    # mistakes, and a single closing sentence fits only one of them.
+    lost: list[str] = []
+    for name in sorted(recorded):
+        if name not in current:
+            lost.append(
+                f"{name}: gone, and it was load-bearing for {sorted(recorded[name])}. "
+                "Retiring a vector retires whatever it was the only one to catch."
+            )
+            continue
+        for code in sorted(recorded[name]):
+            if code not in current[name]:
+                lost.append(
+                    f"{name}: no longer load-bearing for {code!r}. Deleting that rule "
+                    "stopped changing this fixture's outcome, so it no longer "
+                    "exercises it at all."
+                )
+                continue
+            missing = sorted(set(recorded[name][code]) - set(current[name][code]))
+            if missing:
+                lost.append(
+                    f"{name}: no longer separates {missing} for {code!r}. It still "
+                    "fails for the rule, so what it lost is the margin rather than "
+                    "the coverage: it has become a copy of its partner."
+                )
+
+    assert not lost, (
+        "vectors lost the discrimination they were written for:\n  "
+        + "\n  ".join(lost)
+        + f"\nIf the change is intended, update {ROLES_FILE.name} in the same commit "
+        + "and say why."
     )

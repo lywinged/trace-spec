@@ -115,7 +115,7 @@ See the [Quickstart guide](https://trace.agentrust-io.com/docs/quickstart/) for 
 
 ## Standards alignment
 
-Hosted at the Linux Foundation as its own series, "TRACE Specification, a Series of LF Projects, LLC", under [LF Projects policies](https://lfprojects.org/policies/). The Linux Foundation [announced the contribution](https://www.linuxfoundation.org/press/linux-foundation-welcomes-trace-to-advance-verifiable-runtime-evidence-for-ai-workloads) on 25 August 2026, developed with AMD, Intel, Microsoft, OPAQUE and TII. The technical workstream is hosted by CoSAI; see [CoSAI WS4](https://github.com/oasis-open-projects/coalition-for-secure-ai). Builds on [RFC 9711 (EAT)](https://www.rfc-editor.org/rfc/rfc9711), [RFC 9334 (RATS)](https://www.rfc-editor.org/rfc/rfc9334), and SCITT draft-22.
+Hosted at the Linux Foundation as its own series, "TRACE Specification, a Series of LF Projects, LLC", under [LF Projects policies](https://lfprojects.org/policies/). The Linux Foundation [announced the contribution](https://www.linuxfoundation.org/press/linux-foundation-welcomes-trace-to-advance-verifiable-runtime-evidence-for-ai-workloads) on 25 August 2026, developed with AMD, Intel, Microsoft, OPAQUE and TII. Builds on [RFC 9711 (EAT)](https://www.rfc-editor.org/rfc/rfc9711), [RFC 9334 (RATS)](https://www.rfc-editor.org/rfc/rfc9334), and SCITT draft-22.
 
 ## Frequently asked questions
 
@@ -133,7 +133,7 @@ TRACE builds on open IETF and IRTF standards: RFC 9711 (CBOR Web Token / EAT) fo
 
 ### How do I create and verify a Trust Record?
 
-Install the Python library with `pip install agentrust-trace`, sign a record with `TrustRecord.sign(claims, signing_key)`, anchor it to a SCITT ledger with `record.anchor()`, and check it with `record.verify(verifying_key)`.
+Install the library with `pip install agentrust-trace`, sign a record with `sign_record(record, key)`, and check one with `verify_record(record, public_key_or_jwk=trusted_key)`, both imported from `agentrust_trace`. `verify_record` checks the profile URI, the schema, the signature over the RFC 8785 canonical form, and freshness; it checks revocation only when you pass it a revocation source, and it performs no attestation verification. The library does not anchor a record to a transparency ledger: `transparency` is a string member holding the SCITT receipt URI, which a producer fills in once its ledger returns one. The Quickstart page carries a runnable version of both steps.
 
 ### How does TRACE relate to AGT and cMCP?
 
@@ -142,63 +142,6 @@ TRACE is the evidence format. AGT and cMCP produce and consume Trust Records, so
 ### What is the current status of TRACE?
 
 The current specification is TRACE v0.2, published with a conformance test suite. See the Limitations page for scope boundaries before relying on it in production.
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "What is TRACE?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "TRACE (Trust, Runtime Attestation, and Compliance Evidence) is an open specification for hardware-attested AI agent governance records. It defines the record format, the anchoring protocol, and the verification rules for cryptographic evidence that an AI agent ran under a specific policy, in a verified hardware environment, on a given data class, invoking identified tools."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "What does a TRACE Trust Record prove?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "A single signed Trust Record answers, in a form any third party can verify without trusting the operator: what model ran, where it ran, under which policy, what data class it touched, which tools were called, and whether the record is independently anchored to a SCITT transparency ledger."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "What standards is TRACE built on?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "TRACE builds on open IETF and IRTF standards: RFC 9711 (CBOR Web Token / EAT) for the claim envelope, RFC 9334 (RATS) for the attester, verifier, and relying-party roles, and the SCITT draft for transparency-ledger anchoring. It is designed for CoSAI WS4 interoperability."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "How do I create and verify a Trust Record?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Install the Python library with pip install agentrust-trace, sign a record with TrustRecord.sign(claims, signing_key), anchor it to a SCITT ledger with record.anchor(), and check it with record.verify(verifying_key)."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "How does TRACE relate to AGT and cMCP?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "TRACE is the evidence format. AGT and cMCP produce and consume Trust Records, so you can connect them into an end-to-end agent governance pipeline. See the integration guides for details."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "What is the current status of TRACE?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "The current specification is TRACE v0.2, published with a conformance test suite. See the Limitations page for scope boundaries before relying on it in production."
-      }
-    }
-  ]
-}
-</script>
 
 ## Contributing
 

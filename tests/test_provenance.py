@@ -56,6 +56,39 @@ def test_hash_is_stable_and_order_independent() -> None:
     assert tool_catalog_hash(TOOLS) == tool_catalog_hash(list(reversed(TOOLS)))
 
 
+# --- tools is the untrusted party's own claim about itself ------------------
+#
+# check_tool_catalog() passes *tools* through to tool_catalog_hash() unchanged.
+# It is "what the server actually offered you" -- the module's own docstring
+# calls this "the step that catches a live attack" -- so a malformed entry
+# here is not a hypothetical caller mistake, it is the shape a malicious or
+# simply broken server's response takes. t.get(...) on each entry, and
+# iteration over *tools* itself, both assumed a well-formed shape with no
+# check, so either one crashed with AttributeError/TypeError instead of the
+# documented ProvenanceError.
+
+
+@pytest.mark.parametrize("bad_tools", ["not-a-list", None, 42, {"a": 1}])
+def test_non_list_tools_is_refused_not_a_crash(bad_tools) -> None:
+    with pytest.raises(ProvenanceError, match="tools must be a list"):
+        tool_catalog_hash(bad_tools)
+
+
+@pytest.mark.parametrize("bad_entry", ["not-a-dict-tool", None, 42, ["nested", "list"]])
+def test_non_object_tool_entry_is_refused_not_a_crash(bad_entry) -> None:
+    with pytest.raises(ProvenanceError, match=r"tools\[1\] must be an object"):
+        tool_catalog_hash([TOOLS[0], bad_entry])
+
+
+def test_check_tool_catalog_also_refuses_malformed_tools() -> None:
+    """The same crash, reached through the actual security-critical entry
+    point: check_tool_catalog(record, tools), where tools is the server's own
+    response."""
+    signed = sign_record(_record(), generate_key())
+    with pytest.raises(ProvenanceError, match="tools must be a list"):
+        check_tool_catalog(signed, "not-a-list")
+
+
 def test_description_change_changes_the_hash() -> None:
     """The rug-pull this exists to catch.
 
@@ -170,6 +203,60 @@ def test_unsigned_record_is_rejected() -> None:
         verify_record(_record(), key_to_jwk(generate_key()))
 
 
+@pytest.mark.parametrize(
+    "bad_signature", [12345, 3.14, True, ["A", "B"], {"sig": "AA"}, b"AAAAAAAA"]
+)
+def test_a_non_string_signature_is_rejected_not_crashed_on(bad_signature) -> None:
+    """A `record` reaches `verify_record` untrusted, same as every other field.
+
+    `signature + "=" * (-len(signature) % 4)` used to run on whatever JSON value
+    sat under `record["signature"]`, and a non-string -- an int, a bool, a list,
+    a nested object -- raised a bare `TypeError` (`object of type 'int' has no
+    len()` for an int, a `TypeError` on `+` for a dict) rather than the
+    `ProvenanceError` this function documents for every other malformed input.
+    """
+    key = generate_key()
+    signed = sign_record(_record(), key)
+    signed["signature"] = bad_signature
+    with pytest.raises(ProvenanceError, match="base64url string"):
+        verify_record(signed, key_to_jwk(key))
+
+
+@pytest.mark.parametrize("bad_signature", ["a", "你好", "!!!not-base64!!!padding???"])
+def test_a_malformed_base64_signature_is_rejected_not_crashed_on(bad_signature) -> None:
+    """Correctly typed but not decodable: the other half of the same gap.
+
+    A string signature that cannot pad to a whole byte, or that carries a
+    non-ASCII character, previously reached `base64.urlsafe_b64decode` directly
+    and raised `binascii.Error` / `ValueError`, not `ProvenanceError`.
+    """
+    key = generate_key()
+    signed = sign_record(_record(), key)
+    signed["signature"] = bad_signature
+    with pytest.raises(ProvenanceError, match="not valid base64url"):
+        verify_record(signed, key_to_jwk(key))
+
+
+def test_a_malformed_signature_does_not_reorder_the_cnf_check_ahead_of_it() -> None:
+    """The signature-decode guard must land where the crash it replaces did:
+    after the embedded-key checks, not before them.
+
+    Both problems here raise `ProvenanceError`, so nothing here distinguishes a
+    fix that checks the signature first from one that checks `cnf.jwk` first --
+    except which message comes back. This pins that order so a future change
+    that hoists the signature-format check above the `cnf.jwk` checks (an easy
+    slip: the natural-looking place to add it is right where `signature` is
+    first read, several lines above where it is first used) fails here instead
+    of only being noticed as a changed error message downstream.
+    """
+    key = generate_key()
+    signed = sign_record(_record(), key)
+    del signed["cnf"]["jwk"]
+    signed["signature"] = 12345  # also malformed, but cnf.jwk is checked first
+    with pytest.raises(ProvenanceError, match="no cnf.jwk"):
+        verify_record(signed, key_to_jwk(key))
+
+
 def test_unknown_format_version_is_rejected_not_parsed() -> None:
     key = generate_key()
     signed = sign_record({**_record(), "format": "agentrust-io/mcp-server-provenance/2"}, key)
@@ -179,6 +266,77 @@ def test_unknown_format_version_is_rejected_not_parsed() -> None:
 
 def test_format_constant_matches_the_spec() -> None:
     assert FORMAT == "agentrust-io/mcp-server-provenance/1"
+
+
+# malformed records fail closed with ProvenanceError, not a crash
+#
+# `record.get(field) or {}` looks like it defaults a missing block to `{}`, but
+# a present, truthy, non-dict value (a string, a list, a number, `True`) is not
+# caught by the `or`, and the first `.get()` call on it raised an unhandled
+# `AttributeError`. verify_record's docstring promises `ProvenanceError` for
+# "every other rejection"; a caller that only catches ProvenanceError, exactly
+# as documented, would not catch that, and an adversarial record could crash
+# the caller's verification path instead of being rejected by it.
+
+
+def _signed(record):
+    key = generate_key()
+    signed = sign_record(record, key)
+    return signed, key_to_jwk(key)
+
+
+def test_non_object_identity_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "identity": "not-an-object"})
+    with pytest.raises(ProvenanceError, match="identity must be an object"):
+        verify_record(record, jwk)
+
+
+def test_non_object_identity_artifact_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "identity": {"artifact": "not-an-object"}})
+    with pytest.raises(ProvenanceError, match="identity.artifact must be an object"):
+        verify_record(record, jwk)
+
+
+def test_non_object_identity_endpoint_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "identity": {"endpoint": 12345}})
+    with pytest.raises(ProvenanceError, match="identity.endpoint must be an object"):
+        verify_record(record, jwk)
+
+
+def test_non_object_tool_catalog_is_refused_not_a_crash() -> None:
+    record, jwk = _signed({**_record(), "tool_catalog": ["not", "an", "object"]})
+    with pytest.raises(ProvenanceError, match="tool_catalog must be an object"):
+        verify_record(record, jwk)
+
+
+def test_null_identity_and_tool_catalog_still_behave_like_absent() -> None:
+    """`None` is not malformed -- it is how JSON spells an absent block, and the
+    "identifies nothing" / digest-format errors below it are the right rejection,
+    not a type error."""
+    record, jwk = _signed({**_record(), "identity": None})
+    with pytest.raises(ProvenanceError, match="neither an artifact nor an endpoint"):
+        verify_record(record, jwk)
+
+    record, jwk = _signed({**_record(), "tool_catalog": None})
+    with pytest.raises(ProvenanceError, match="not a sha256"):
+        verify_record(record, jwk)
+
+
+def test_check_tool_catalog_also_refuses_a_non_object_tool_catalog() -> None:
+    """The same crash existed a second time: check_tool_catalog() is callable on
+    its own, independent of verify_record(), and read tool_catalog with the same
+    unguarded `(record.get(...) or {}).get(...)` pattern."""
+    signed, _ = _signed({**_record(), "tool_catalog": "not-an-object"})
+    with pytest.raises(ProvenanceError, match="tool_catalog must be an object"):
+        check_tool_catalog(signed, TOOLS)
+
+
+def test_check_tool_catalog_null_tool_catalog_still_behaves_like_absent() -> None:
+    """Control test, mirroring the one above: a genuinely absent tool_catalog is
+    a mismatch (there is nothing to match against), not a type error."""
+    signed, _ = _signed({**_record(), "tool_catalog": None})
+    with pytest.raises(ToolCatalogMismatch, match="about the server, not the document"):
+        check_tool_catalog(signed, TOOLS)
 
 
 # --- the step that catches a live attack -----------------------------------
@@ -574,3 +732,77 @@ def test_zero_is_a_bound_and_not_a_falsy_stand_in_for_unset() -> None:
     verify_record(a_moment_ago, key_to_jwk(key))  # None: no age bound
     with pytest.raises(ProvenanceError, match="stale"):
         verify_record(a_moment_ago, key_to_jwk(key), max_age_seconds=0)
+
+
+# --- the record's own type, which no guard on a field inside it can reach ------
+#
+# #225 added _as_object for record["identity"] and record["tool_catalog"]. Neither
+# is reachable until the record itself is a mapping: record.get(...) on a list or
+# a string raises AttributeError, which is not the ProvenanceError verify_record
+# documents and is not caught by a caller written against that contract.
+
+NOT_OBJECTS = [None, 5, 0, "a string", "", [], [1, 2], True, False, b"bytes"]
+
+
+@pytest.mark.parametrize("bad", NOT_OBJECTS)
+def test_verify_record_refuses_a_non_object_record(bad) -> None:
+    key = generate_key()
+    with pytest.raises(ProvenanceError, match="record must be a JSON object"):
+        verify_record(bad, key_to_jwk(key))
+
+
+@pytest.mark.parametrize("bad", NOT_OBJECTS)
+def test_check_tool_catalog_refuses_a_non_object_record(bad) -> None:
+    with pytest.raises(ProvenanceError, match="record must be a JSON object"):
+        check_tool_catalog(bad, TOOLS)
+
+
+def test_the_record_type_is_checked_before_the_record_is_read() -> None:
+    """A non-object record is refused for being one, not for a missing `format`."""
+    key = generate_key()
+    with pytest.raises(ProvenanceError) as excinfo:
+        verify_record([], key_to_jwk(key))
+    assert "unknown format" not in str(excinfo.value)
+
+
+# #320: `build_record` coerced an explicitly supplied `issued_at` with `int()` before
+# handing it to `_check_structure`, so the guard there never saw what the caller passed.
+# Its own comment says what it is for: "bool is an int subclass, and True would otherwise
+# pass as a timestamp". The order defeated it.
+@pytest.mark.parametrize(
+    ("supplied", "was_coerced_to"),
+    [
+        (True, 1),
+        (False, 0),
+        (1.9, 1),
+        ("123", 123),
+        (-0.5, 0),
+    ],
+)
+def test_an_explicitly_supplied_issued_at_is_validated_before_it_is_coerced(
+    supplied: object, was_coerced_to: int
+) -> None:
+    assert int(supplied) == was_coerced_to, "the coercion this pins must still be the one"
+    with pytest.raises(ProvenanceError, match="issued_at"):
+        _record(issued_at=supplied)
+
+
+@pytest.mark.parametrize("supplied", [[1], "abc", b"7", {"t": 1}, float("nan")])
+def test_an_unconvertible_issued_at_raises_what_the_module_documents(
+    supplied: object,
+) -> None:
+    """`int()` raised `TypeError` or `ValueError` here, which no caller written against
+    this module's contract catches."""
+    with pytest.raises(ProvenanceError, match="issued_at"):
+        _record(issued_at=supplied)
+
+
+def test_a_valid_issued_at_is_still_carried_through_unchanged() -> None:
+    assert _record(issued_at=1_754_000_000)["issued_at"] == 1_754_000_000
+
+
+def test_an_omitted_issued_at_is_still_stamped_with_the_current_time() -> None:
+    before = int(time.time())
+    stamped = _record()["issued_at"]
+    assert isinstance(stamped, int) and not isinstance(stamped, bool)
+    assert before <= stamped <= int(time.time())

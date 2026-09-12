@@ -9,7 +9,8 @@ Install the development dependencies and run the suite from the repository root:
 ```bash
 pip install -e ".[dev]"
 pytest
-ruff check src tests
+ruff check src tests scripts
+python tools/check_dashes.py
 mypy src/agentrust_trace
 ```
 
@@ -17,6 +18,24 @@ Pytest is configured to import `src/agentrust_trace` from the checkout. A stale
 wheel installed elsewhere in the environment must not shadow the code under
 test; a regression test fails with the resolved import path if that guarantee is
 lost.
+
+A check turning green is not a review of the edit that turned it green. Each of
+these was built to see one thing, and none of them sees what your repair
+introduced. `tools/check_dashes.py` bans four characters and prints the form to
+use instead, and it cannot tell whether you used that form. Take an en dash out
+of a range, put a bare `to` in its place, and you have `1to3` where `1 to 3` was
+meant, with the check passing: a ban on a character cannot see the shape of the
+replacement. Read the changed line in the shape a reader meets it, rendered
+rather than as source, and run something that could have caught the new mistake.
+The check you just fixed is not that something.
+
+## Using AI to contribute
+
+Use agents. A lot of this was built with them and saying otherwise would be dishonest.
+
+The rule is that you have to understand what you submit. If you cannot explain what your change does and how it interacts with the rest of the system, with the agent closed, do not open the pull request. Reviewing a change nobody can explain costs more than writing it did, and it becomes someone else's problem the moment it merges.
+
+That is a rule about understanding, not about tooling.
 
 ## DCO sign-off
 
@@ -90,4 +109,4 @@ Maintainer response targets are commitments to you, not minimums. Ping the PR if
 
 Anyone who submits a PR, files an issue, or participates in discussion on the repository is a Contributor bound by the license terms.
 
-Specification contributions are made under the [Community Specification License 1.0](Governance/COMMUNITY-SPECIFICATION-LICENSE.md) and the [Community Specification Contributor License Agreement](Governance/CLA.md). Source-code contributions are made under Apache License 2.0. Documentation contributions other than specification text are made under CC BY 4.0. You keep the copyright in your contributions: no contributor is asked to assign copyright to the project. See [LICENSE](LICENSE), the [license map](Governance/License.md), and [General Project Policies](GOVERNANCE.md#general-project-policies).
+Specification contributions are made under the [Community Specification License 1.0](Governance/COMMUNITY-SPECIFICATION-LICENSE.md) and the [Community Specification Contributor License Agreement](Governance/CLA.md). Source-code contributions are made under Apache License 2.0. Documentation contributions other than specification text are made under CC BY 4.0. You keep the copyright in your contributions: no contributor is asked to assign copyright to the project. See [LICENSE](https://github.com/agentrust-io/trace-spec/blob/main/LICENSE), the [license map](Governance/License.md), and [General Project Policies](GOVERNANCE.md#general-project-policies).

@@ -37,6 +37,17 @@ every permitted accepted set is exactly `(v0.2,)`. The field stays on
 it, and `test_a_disclosed_downgrade_is_unreachable_in_this_build` fails if that day
 arrives, rather than letting the dead branch sit unnoticed.
 
+*Correction, 2026-09-12.* There is no `VerificationStatement`. This branch was synced
+onto upstream main, 68 commits ahead of the base it was written on, and #271 had already
+added a `VerificationResult` carrying the revocation outcome. Obligation 3 is now a
+`profile` field on that type, which is the smaller change and the one argued for on #116
+on 09-07. The four booleans this branch had invented alongside it, `key_source`,
+`freshness_checked`, `nonce_checked` and `revocation_checked`, are gone rather than
+ported: none of them is in #116, and `VerificationResult.revocation` already reports
+revocation coverage as an outcome rather than as a boolean. The test named above survives
+unchanged and still fails on the day a second acceptable schema ships, which was measured
+rather than assumed by packaging upstream's own `schema/trace-claim-v0.3-draft.json`.
+
 **On the vectors.** `04-downgrade-disclosed` became `04-unschemaed-profile-refused`, and
 its record is now an ordinary v0.2 record. That is the substantive change, not the
 rename: a vector aimed at a configuration rule has to carry a record with nothing wrong

@@ -4,12 +4,11 @@ The criteria come from defects found on real sets. A standard that only ever mea
 other people's work is advocacy, so this module measures every set by the same loader
 and records the shortfalls where they fall rather than where it would be comfortable.
 
-Where they fall today: `canonicalization-boundary`, which is ours, expects acceptance
-in every vector, so it cannot tell a conformant verifier from one that accepts
-unconditionally. That is recorded in `KNOWN_ONE_DIRECTIONAL` with the record asserted
-exactly, so it cannot widen unnoticed and the entry is deleted when the missing
-direction is added. `build-provenance-depth` carries a margin at every boundary and
-nothing is recorded against it.
+`canonicalization-boundary` previously expected acceptance in every vector, so it
+could not tell a conformant verifier from one that accepts unconditionally. Its
+non-JCS signing-preimage negatives supply the missing direction. No set currently
+needs an exemption in `KNOWN_ONE_DIRECTIONAL`; any future shortfall is recorded
+exactly rather than allowed to widen unnoticed.
 
 A set is measured here or named in `MEASURED_ELSEWHERE` with the test that covers it.
 Neither is possible to skip: `test_every_vector_set_on_disk_is_measured_somewhere`
@@ -119,8 +118,21 @@ def delegation_link() -> list[Vector]:
                  lambda e: e["classification"], lambda e: list(e.get("codes") or []))
 
 
+def revocation_bundle() -> list[Vector]:
+    """The revocation-bundle set. Boundaries are its codes, one code per rule.
+
+    `rejected` is a fourth outcome beside 3.2.3's three: the key was named by a
+    statement and the record refused. It counts as non-accepting here, which is
+    what it is.
+    """
+    return _load("revocation-bundle",
+                 lambda e: "rejected" if e["rejected"] else e["outcome"],
+                 lambda e: list(e.get("codes") or []))
+
+
 SETS = {
     "build-provenance-depth": (build_provenance_depth, _depth_boundary),
+    "revocation-bundle": (revocation_bundle, None),
     "canonicalization-boundary": (canonicalization_boundary, None),
     "delegation-link": (delegation_link, None),
     "verifier-compatibility": (verifier_compatibility, None),
@@ -130,15 +142,12 @@ SETS = {
 # only ever expects rejection is passed by one that rejects everything; a set that
 # only ever expects acceptance is passed by one that accepts everything, and that
 # half is the one that gets left out.
-# One set is knowingly one-directional. `canonicalization-boundary` detects a
-# non-conformant canonicalizer by the fact that it *rejects* records a conformant
-# verifier accepts, so every vector in it expects acceptance and the set cannot tell
-# a correct verifier from one that accepts unconditionally. That second implementation
-# is a real failure, not a hypothetical, so this is a gap rather than a design: it
-# closes when the set gains one record signed over a non-JCS form, which a conformant
-# verifier must reject. Recorded rather than skipped, and asserted exactly, so it
-# cannot widen and cannot be forgotten.
-KNOWN_ONE_DIRECTIONAL = {"canonicalization-boundary": "accept"}
+# No set currently needs an exemption. The former `canonicalization-boundary`
+# entry was removed when schema-valid records signed over non-JCS preimages added
+# the rejecting direction alongside the existing RFC 8785 positive controls.
+# Keep any future shortfall explicit and exact; removing an exemption does not
+# relax either unconditional-answer check below.
+KNOWN_ONE_DIRECTIONAL: dict[str, str] = {}
 
 
 @pytest.mark.parametrize("name", sorted(SETS))
@@ -225,6 +234,16 @@ def test_the_loader_reads_a_different_set_for_each_name() -> None:
 MEASURED_ELSEWHERE = {
     "action-receipts": "tests/test_vector_completeness.py, which recovers its rule "
                        "inventory from the verifier's source rather than restating it",
+    # Not loadable here: the adequacy criteria grade a set on accept/reject outcomes,
+    # and this set's outcomes are three assurance grades, so `trivially_satisfied_by`
+    # would be comparing against the wrong two unconditional implementations.
+    "runtime-evidence": "tests/test_runtime_evidence_vectors.py, which asserts the "
+                        "half this repository can honestly measure (schema, signature, "
+                        "evidence shape, and the pinned claim that the top grade is "
+                        "unreachable) and names the half it cannot, quote verification, "
+                        "which examples/runtime-evidence/test_appraisal.py runs in the "
+                        "dedicated runtime-evidence job against agent-manifest's verifier "
+                        "at a pinned commit",
 }
 
 

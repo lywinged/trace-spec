@@ -8,6 +8,7 @@ import time
 from hmac import compare_digest
 from typing import Any
 
+import rfc8785
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agentrust_trace.sign import _b64url_decode, _canonical_bytes, _pubkey_from_jwk
@@ -26,24 +27,47 @@ class IntentBridgeError(ValueError):
 
 
 class AuthorizationDenied(IntentBridgeError):
-    """The signed decision is not an authorization to execute."""
+    """The signed decision is the literal valid `deny`, not authorization to execute."""
 
 
 class AuthorizationMismatch(IntentBridgeError):
     """Execution evidence does not match the signed authorization."""
 
 
+def _jcs(value: dict[str, Any], what: str) -> bytes:
+    """Canonical bytes for *value*, as ``IntentBridgeError`` when there are none.
+
+    ``_canonical_bytes`` is ``rfc8785.dumps`` and raises by design: a value JCS has
+    no form for has no canonical bytes to return. Its errors are ``ValueError``
+    subclasses, which satisfies ``sign``'s documented contract but not this
+    module's: ``rfc8785.CanonicalizationError`` is not an ``IntentBridgeError``, so
+    a caller written against this module's own exception does not catch it.
+
+    Four of the five values that trip it are ordinary JSON that ``json.loads``
+    accepts, an integer outside the JCS safe range, a non-finite float, and a lone
+    surrogate among them, so an authorization assembled from a parsed document
+    reaches this.
+    """
+    try:
+        return _canonical_bytes(value)
+    except rfc8785.CanonicalizationError as exc:
+        raise IntentBridgeError(
+            f"{what} has no RFC 8785 canonical form, so it cannot be digested or "
+            f"signed: {exc}"
+        ) from exc
+
+
 def digest_jcs(value: dict[str, Any]) -> str:
     """Return the SHA-256 digest of an RFC 8785 canonical JSON object."""
     if not isinstance(value, dict):
         raise IntentBridgeError("a digest input must be a JSON object")
-    return f"sha256:{hashlib.sha256(_canonical_bytes(value)).hexdigest()}"
+    return f"sha256:{hashlib.sha256(_jcs(value, 'the digest input')).hexdigest()}"
 
 
 def sign_bridge(authorization: dict[str, Any], key: Ed25519PrivateKey) -> dict[str, Any]:
     """Sign the complete authorization; key material is deliberately not embedded."""
     artifact = {"profile": BRIDGE_PROFILE, "authorization": authorization}
-    signature = base64.urlsafe_b64encode(key.sign(_canonical_bytes(artifact))).rstrip(b"=")
+    signature = base64.urlsafe_b64encode(key.sign(_jcs(artifact, "the authorization"))).rstrip(b"=")
     return {**artifact, "signature": signature.decode("ascii")}
 
 
@@ -68,6 +92,14 @@ def _digest(value: Any, field: str) -> str:
 def _nonempty_string(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise IntentBridgeError(f"{field} must be a non-empty string")
+    return value
+
+
+
+def _decision(value: Any) -> str:
+    """Return a valid authorization decision or refuse a malformed value."""
+    if not isinstance(value, str) or value not in {"allow", "deny"}:
+        raise IntentBridgeError('authorization.decision must be "allow" or "deny"')
     return value
 
 
@@ -101,7 +133,18 @@ def verify_bridge(
     signature_value = root.get("signature")
     if not isinstance(signature_value, str):
         raise IntentBridgeError("signature must be a base64url string")
-    signature = _b64url_decode(signature_value, field="signature")
+    # `_b64url_decode` is `sign`'s own helper and raises the bare `ValueError` that
+    # module documents for itself, not an `IntentBridgeError`: a plain `ValueError`
+    # is not an instance of the subclass this module defines, so a malformed (but
+    # correctly-typed) base64url string -- too short to pad to a whole byte, or
+    # carrying a non-ASCII character -- previously escaped as a raw `ValueError` a
+    # caller written against `IntentBridgeError` does not catch. Same failure this
+    # module's own `_jcs` docstring calls out for `rfc8785.CanonicalizationError`;
+    # this call site needs the same wrapping.
+    try:
+        signature = _b64url_decode(signature_value, field="signature")
+    except ValueError as exc:
+        raise IntentBridgeError(str(exc)) from exc
     fields = {
         "authorization_id", "decision", "authorizer", "authorizer_key_id",
         "authorized_at", "expires_at", "scope", "pic", "declaration_digest",
@@ -113,11 +156,16 @@ def verify_bridge(
         raise IntentBridgeError(f"authorization is missing fields: {sorted(missing)}")
     for field in ("authorization_id", "authorizer", "authorizer_key_id"):
         _nonempty_string(authorization[field], f"authorization.{field}")
+    _decision(authorization["decision"])
 
+    # Hoisted out of the try below. Inside it, an authorization JCS cannot serialize
+    # was reported as "the signature is invalid", which is a different fact and sends
+    # the reader to look at a key. There are no bytes for a signature to be checked
+    # against, so nothing has been learned about the signature at all.
+    body = _jcs({"profile": BRIDGE_PROFILE, "authorization": authorization},
+                "the authorization")
     try:
-        _pubkey_from_jwk(trusted_authorizer_jwk).verify(
-            signature, _canonical_bytes({"profile": BRIDGE_PROFILE, "authorization": authorization})
-        )
+        _pubkey_from_jwk(trusted_authorizer_jwk).verify(signature, body)
     except Exception as exc:
         raise IntentBridgeError("authorization signature is invalid") from exc
     trusted_kid = trusted_authorizer_jwk.get("kid")
@@ -166,9 +214,10 @@ def verify_bridge(
         if not compare_digest(expected, actual):
             raise AuthorizationMismatch(f"PIC {name} does not match the signed authorization")
 
+    tool_call_digest = digest_jcs(tool_call)
     digest_pairs = (
         ("declaration_digest", digest_jcs(declaration)),
-        ("tool_call_digest", digest_jcs(tool_call)),
+        ("tool_call_digest", tool_call_digest),
     )
     for name, actual in digest_pairs:
         expected = _digest(authorization[name], f"authorization.{name}")
@@ -181,7 +230,20 @@ def verify_bridge(
         if not isinstance(transcript, dict) or set(transcript) != {"before", "after"}:
             raise AuthorizationMismatch("a full before/after transcript is required")
         before = transcript.get("before")
-        if not isinstance(before, dict) or before.get("tool_call") != tool_call:
+        if not isinstance(before, dict) or not isinstance(before.get("tool_call"), dict):
+            raise AuthorizationMismatch("transcript.before.tool_call does not match execution")
+        # Host-language equality is not this bridge's identity relation. Python holds
+        # True == 1 and False == 0, nested objects included, so comparing the two call
+        # objects with != accepts a transcript whose call has different JCS bytes from
+        # the one the authorization digested (#317). Every other comparison in this
+        # function is over canonical bytes; so is this one.
+        try:
+            before_digest = digest_jcs(before["tool_call"])
+        except IntentBridgeError:
+            raise AuthorizationMismatch(
+                "transcript.before.tool_call does not match execution"
+            ) from None
+        if not compare_digest(before_digest, tool_call_digest):
             raise AuthorizationMismatch("transcript.before.tool_call does not match execution")
         if not isinstance(transcript.get("after"), dict):
             raise AuthorizationMismatch("transcript.after must contain the execution result")

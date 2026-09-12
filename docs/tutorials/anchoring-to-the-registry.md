@@ -1,6 +1,6 @@
 # Anchoring a Trust Record to the TRACE registry
 
-After signing a Trust Record, you can anchor it to the TRACE transparency registry. The anchor proves the record existed at a specific time and has not been altered since, which is tamper evidence that holds even if the operator who produced the record is later compromised.
+After signing a Trust Record, you can anchor it to the TRACE transparency registry. An inclusion proof binds the signed record to a batch root. Any claim about when it existed also depends on authenticating and trusting the registry's checkpoint and timestamp.
 
 **What you need:** A signed Trust Record (from [Signing your first trust record](signing-your-first-trust-record.md)).
 
@@ -15,7 +15,7 @@ After signing a Trust Record, you can anchor it to the TRACE transparency regist
 
 A Trust Record carries a signature from the issuer's key. A verifier holding that key can confirm the record has not been modified, but only if the key is trustworthy. If the issuer is later compromised, an attacker holding the key could forge records backdated to before the compromise.
 
-Anchoring solves this with a different trust root: an append-only log whose history a third party can inspect. Once a record is anchored, its exact bytes are fixed in the log at that timestamp. A verifier recomputes the Merkle root from the record and its proof and compares it to the published entry. No trust in the operator is required, and no call back to the issuer is needed.
+Anchoring introduces a separate trust input: the registry entry or checkpoint. A verifier recomputes the Merkle root from the record and proof and compares it to an independently authenticated entry. Accepting a record, proof, and root from the same untrusted sender establishes only internal consistency. Check the registry's append-only history and timestamp policy separately.
 
 The normative format is [TRACE Registry Anchor Format v1](../../spec/registry-anchor-v1.md). Read §0 of it before you implement anything: TRACE uses **RFC 8785 (JCS)** to canonicalize a record for *signing* and **sorted-key JSON** to canonicalize it for the *anchor leaf*. Assuming JCS at the leaf produces proofs that never verify, and the failure has no useful diagnostic.
 
@@ -35,9 +35,9 @@ Where present, it identifies the registry entry anchoring the record. At Level 2
 
 ---
 
-## Step 1 — Sign the record
+## Step 1: Sign the record
 
-Sign as normal. You do not need a placeholder for `transparency`; leave it unset until you have an anchor.
+Sign the final record. Leave `transparency` absent if the registry entry URI is not known yet; distribute the receipt separately. If the registry supports reserving an entry URI, set that URI before signing and submit those exact signed bytes. Do not invent a placeholder URI.
 
 ```python
 import time
@@ -65,7 +65,7 @@ signed = sign_record(record, key)
 
 ---
 
-## Step 2 — Submit the record
+## Step 2: Submit the record
 
 Producers submit signed records to the registry's staging area, one JSON file per record. The anchor pipeline runs on a schedule, groups pending records by producer, builds one Merkle batch per group, and writes both the registry entry and one inclusion proof per record.
 
@@ -73,7 +73,7 @@ You do not have to use the reference registry. Anything implementing [Anchor For
 
 ---
 
-## Step 3 — Retrieve your inclusion proof
+## Step 3: Retrieve your inclusion proof
 
 The pipeline writes one proof per submitted record:
 
@@ -85,7 +85,7 @@ The pipeline writes one proof per submitted record:
 
 ---
 
-## Step 4 — Verify the proof yourself
+## Step 4: Verify the proof yourself
 
 This is the step that matters, and the one most likely to be skipped. A proof you have never checked is a receipt, not evidence.
 
@@ -99,30 +99,39 @@ trace-verify \
   --batch-id 2026-06-12-001
 ```
 
-Exit code 0 means the record is proven included in that batch. Exit code 1 means it is not, and there is no partial result between the two.
+Exit code 0 means the record is proven included in that batch **and** its producer's signature verified. Exit code 1 means one of those failed, and there is no partial result between the two.
+
+You do not need a clone of the registry for this. Swap `--entry` for `--entry-url` and both the entry and the producer key that signed the record are fetched over https, from an allowlisted host only:
+
+```bash
+trace-verify   --claim your-record.json   --proof your-record.proof.json   --entry-url https://raw.githubusercontent.com/agentrust-io/trace-registry/main/registry/2026/06/12.ndjson
+```
+
+Needs `trace-verify` 0.4.1 or later. The command reports which producer key it used and where it came from, because a key fetched from a host is a different trust statement from one you already held.
 
 The verifier is standard library only and small enough to read in one sitting. Read it, or reimplement it from [Anchor Format v1 §5.1](../../spec/registry-anchor-v1.md), which is written so you can. Verifying with a tool the registry operator wrote is better than nothing, and weaker than verifying with one you wrote.
 
 ---
 
-## Step 5 — Set `transparency`
+## Step 5: Preserve the anchored record
 
-Once anchored, set `transparency` to the entry that anchors your record and re-sign, so the signature covers the anchor reference.
-
-```python
-record["transparency"] = "<registry entry URI>"
-signed_final = sign_record(record, key)
-```
-
-A verifier retrieving that entry can confirm inclusion without contacting you, which is the whole point.
+Keep the signed object unchanged with its proof and registry entry. Adding `transparency` and re-signing creates a different object; the original proof no longer covers it. Submit that new object for anchoring if you change any signed field. A Level 2 workflow needs a registry arrangement that lets the final record name its entry before its bytes are committed.
 
 ---
 
 ## What this proves, and what it does not
 
-Inclusion proves the exact signed bytes were in the batch at the entry's timestamp, and that they have not changed since.
+Inclusion verifies the exact signed object against the supplied batch root. Authenticity and timing depend on the separately trusted registry entry or checkpoint.
 
-It does not validate the signature, and it does not say the record's contents are true. Signature verification against the producer key is a separate step (spec §3.3). A record can be genuinely anchored and still describe something inaccurate; anchoring establishes *when these bytes existed*, and nothing more.
+Signature verification is a separate question from inclusion, and `trace-verify` answers both: it verifies the producer's Ed25519 signature against the registered key unless you pass `--no-verify-signature`, which warns loudly, because inclusion alone does not prove the named producer signed anything. Exit code 0 means both passed.
+
+Neither says the record's contents are true. Inclusion alone does not establish complete logging, a trustworthy timestamp, or an append-only history either. For the last of those, ask the registry's own history the question directly:
+
+```bash
+trace-verify chain registry/2026/09/01.ndjson
+```
+
+That checks the checkpoint chain is internally consistent and that it still matches the entries stored under it. The second half is what catches an entry edited after it was anchored.
 
 ---
 
@@ -130,8 +139,8 @@ It does not validate the signature, and it does not say the record's contents ar
 
 | Step | What happens |
 |---|---|
-| Sign the record | `transparency` stays unset until there is an anchor to name |
+| Sign the record | Set a reserved entry URI before signing, or leave `transparency` absent |
 | Submit to staging | The pipeline batches by producer and builds a Merkle tree |
 | Retrieve the proof | `leaf_index` plus `audit_path`, one per record |
 | **Verify it yourself** | Recompute the root; exit 0 or exit 1, nothing in between |
-| Set `transparency`, re-sign | Signature now covers the anchor reference |
+| Preserve the record | Keep the exact signed object covered by the proof |

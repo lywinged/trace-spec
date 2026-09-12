@@ -57,9 +57,21 @@ SAFE_INTEGER = 2**53 - 1
 BOUNDED_SCHEMAS = (
     "schema/pic-trace-bridge-v1.json",
     "schema/trace-claim.json",
+    # Draft, and bounded for the same reason the file it was generated from is: it is
+    # `schema/trace-claim.json` plus one member, and `runtime.evidence` adds no integer
+    # field, so every integer here is the bounded one it inherited. Classified rather
+    # than exempted because a draft schema for signed records is exactly the file that
+    # would carry an unbounded integer into v0.3 unnoticed.
+    "schema/trace-claim-v0.3-draft.json",
     "schema/trace-revocation.json",
     "schema/trace-revocation-bundle.json",
     "src/agentrust_trace/schema/trace-v0.2.json",
+    # Packaged copies of the two revocation schemas, read by `revocation.py` so the
+    # installed package validates bundles without the repository and without the
+    # network. `tests/test_revocation_bundle.py` holds each byte-identical to its
+    # source under `schema/`.
+    "src/agentrust_trace/schema/trace-revocation.json",
+    "src/agentrust_trace/schema/trace-revocation-bundle.json",
 )
 UNBOUNDED_SCHEMAS = {
     "src/agentrust_trace/schema/trace-v0.1.json": (

@@ -14,7 +14,7 @@ from agentrust_trace import (
     TRACE_PROFILE_V0_1,
     TRACE_PROFILE_V0_2,
     TrustRecord,
-    VerificationStatement,
+    VerificationResult,
     generate_key,
     jwk_thumbprint,
     key_to_jwk,
@@ -336,7 +336,7 @@ def test_verify_record_rejects_wrong_trusted_key():
     key_a = generate_key()
     key_b = generate_key()
     record = sign_record(_fresh_record(), key_a)
-    # Signed by A, verified against B's public key — must not verify.
+    # Signed by A, verified against B's public key: must not verify.
     with pytest.raises(ValueError, match=r"cnf\.jwk.*trusted key"):
         verify_record(record, key_to_jwk(key_b))
 
@@ -435,6 +435,77 @@ def test_verify_record_rejects_negative_future_skew_configuration():
 
     with pytest.raises(ValueError, match="must be non-negative"):
         verify_record(record, key_to_jwk(key), max_future_skew_seconds=-1)
+
+
+# --- freshness policy inputs, shared with provenance.py via `_check_seconds` --
+#
+# The age/skew bounds are verifier configuration, and a malformed one fails in
+# the direction that matters: -1 is not a stricter bound, it calls every
+# record ever issued stale, uniformly, with no error naming the cause. `bool`
+# gets its own case because it is a subclass of `int`, so `True` would
+# otherwise be accepted as one second. `provenance.verify_record` already
+# guarded against this (per the review on #164); this is that same guard on
+# the Trust Record side.
+
+
+@pytest.mark.parametrize("bad", [-1, -86400, True, False, 1.5, "300", object()])
+def test_a_malformed_max_age_is_reported_not_applied(bad) -> None:
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+    with pytest.raises(ValueError) as exc:
+        verify_record(record, key_to_jwk(key), max_age_seconds=bad)
+    assert "max_age_seconds must be" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad", [True, False, 1.5, "300", None])
+def test_a_malformed_skew_is_reported_not_applied(bad) -> None:
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+    with pytest.raises(ValueError) as exc:
+        verify_record(record, key_to_jwk(key), max_future_skew_seconds=bad)
+    assert "max_future_skew_seconds must be" in str(exc.value)
+
+
+@pytest.mark.parametrize("ok", [1, 86400])
+def test_a_well_formed_bound_still_verifies(ok: int) -> None:
+    key = generate_key()
+    verify_record(sign_record(_fresh_record(), key), key_to_jwk(key), max_age_seconds=ok)
+    verify_record(
+        sign_record(_fresh_record(), key), key_to_jwk(key), max_future_skew_seconds=ok
+    )
+
+
+@pytest.mark.parametrize("bad", [-1, -86400, True, False, 1.5, "300", object(), None])
+def test_a_malformed_bundle_age_is_reported_not_applied(bad) -> None:
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+    with pytest.raises(ValueError) as exc:
+        verify_record(record, key_to_jwk(key), max_bundle_age_seconds=bad)
+    assert "max_bundle_age_seconds must be" in str(exc.value)
+
+
+@pytest.mark.parametrize("ok", [1, 86400])
+def test_a_well_formed_bundle_age_still_verifies(ok: int) -> None:
+    key = generate_key()
+    verify_record(
+        sign_record(_fresh_record(), key), key_to_jwk(key), max_bundle_age_seconds=ok
+    )
+
+
+def test_zero_is_a_bound_and_not_a_falsy_stand_in_for_unset() -> None:
+    """`0` and `None` are different policies and must not be conflated.
+
+    `None` disables the age bound; `0` is the strictest one expressible - the
+    record must be issued at this instant, so anything already in the past is
+    stale. A validator that treated `0` as falsy would silently accept every
+    record under the strictest policy a caller can write.
+    """
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+    time.sleep(1.1)
+    verify_record(record, key_to_jwk(key), max_age_seconds=None)  # disabled: passes
+    with pytest.raises(ValueError, match="stale"):
+        verify_record(record, key_to_jwk(key), max_age_seconds=0)
 
 
 def test_verify_record_rejects_non_okp_jwk():
@@ -571,6 +642,69 @@ def test_verify_record_fails_closed_when_revocation_source_errors():
 
     with pytest.raises(ValueError, match="could not be determined"):
         verify_record(record, key_to_jwk(key), revocation=unreachable)
+
+
+@pytest.mark.parametrize("answer", [None, "", 0, [], {}, 0.0])
+def test_verify_record_fails_closed_when_the_store_answers_with_a_non_bool(answer):
+    """A falsy non-bool is not "not revoked". It is no answer at all.
+
+    ``RevocationStore`` is ``Callable[[str], bool]``. Before this, the return value
+    was read by truthiness, so every value here let the key through. ``None`` is the
+    one that matters: it is what a lookup returns when its author handled the 200 and
+    forgot the rest, which is precisely the outage
+    ``test_verify_record_fails_closed_when_revocation_source_errors`` exists to
+    survive. The two cases are one fact, and only the noisier half was covered.
+    """
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+
+    with pytest.raises(ValueError, match="could not be determined"):
+        verify_record(record, key_to_jwk(key), revocation=lambda _identifier: answer)
+
+
+@pytest.mark.parametrize("answer", ["no", "false", "unrevoked", [0]])
+def test_verify_record_fails_closed_when_a_truthy_non_bool_would_have_read_as_revoked(answer):
+    """The same guard, from the side that would not have been a security hole.
+
+    Truthiness read ``"no"`` as revoked and ``0`` as not revoked, which is not a
+    conservative reading in one direction and a lax one in the other. It is no
+    reading at all: the truth value of a string says nothing about revocation. Both
+    halves have to fail closed or the guard is a coin flip that happens to land
+    safely half the time.
+    """
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+
+    with pytest.raises(ValueError, match="could not be determined"):
+        verify_record(record, key_to_jwk(key), revocation=lambda _identifier: answer)
+
+
+def test_verify_record_still_accepts_the_two_answers_the_type_allows():
+    """Without this, refusing every callable would pass both tests above."""
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+
+    verify_record(record, key_to_jwk(key), revocation=lambda _identifier: False)
+
+    with pytest.raises(ValueError, match="revoked"):
+        verify_record(record, key_to_jwk(key), revocation=lambda _identifier: True)
+
+
+def test_the_membership_branch_is_untouched_by_the_bool_guard():
+    """``in`` yields a real bool whatever ``__contains__`` returns, so a container
+    store needs no guard and must not acquire one by accident."""
+
+    class AnswersWithAString:
+        def __contains__(self, _identifier: object) -> bool:
+            return "yes"  # type: ignore[return-value]
+
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+
+    with pytest.raises(ValueError, match="revoked"):
+        verify_record(record, key_to_jwk(key), revocation=AnswersWithAString())
+
+    verify_record(record, key_to_jwk(key), revocation=set())
 
 
 def test_verify_record_revocation_works_with_public_key_object():
@@ -770,10 +904,13 @@ def test_vector_known_version_verifies_and_echoes_the_profile():
 
     statement = verify_record(record, jwk)
 
-    assert isinstance(statement, VerificationStatement)
+    assert isinstance(statement, VerificationResult)
     assert statement.profile == TRACE_PROFILE_V0_2
     assert statement.accepted_profiles == DEFAULT_ACCEPTED_PROFILES
-    assert statement.key_source == "trusted"
+    # `trusted_key_thumbprint` is upstream's, and it is what `key_source` was reaching
+    # for before this branch was synced: the result names the key it verified against
+    # rather than leaving the reader to assume which one ran.
+    assert statement.trusted_key_thumbprint == jwk_thumbprint(jwk)
 
 
 def test_vector_widening_to_an_unschemaed_profile_is_refused():
@@ -799,7 +936,7 @@ def test_vector_widening_to_an_unschemaed_profile_is_refused():
 def test_a_disclosed_downgrade_is_unreachable_in_this_build():
     """The consequence of the rule above, pinned rather than left to be rediscovered.
 
-    ``VerificationStatement`` can express a run under a profile other than the newest
+    ``VerificationResult`` can express a run under a profile other than the newest
     the verifier declared. This build cannot produce one: the only profiles it carries
     a schema for are v0.2 and the v0.1 identifier, and the cutover forbids accepting
     v0.1 under any configuration. So every accepted set this build permits is exactly
@@ -862,14 +999,24 @@ def test_verify_record_rejects_empty_accepted_profiles():
 
 
 def test_verification_statement_reports_check_coverage():
-    """The statement distinguishes "checked and passed" from "never checked"."""
+    """The result distinguishes "checked and passed" from "never checked".
+
+    This asserted four booleans this branch had added to a type of its own:
+    `key_source`, `freshness_checked`, `nonce_checked` and `revocation_checked`. None of
+    them is in #116, which asks for the profile and nothing else, and the branch was
+    synced onto a main where `VerificationResult` already reports revocation coverage
+    properly, as an outcome rather than a boolean. So the three that upstream does not
+    carry are gone rather than ported: they were scope this proposal never claimed, and
+    carrying them would have widened a #116 pull request by four fields nobody asked
+    for. What survives is the property they were reaching for, asserted against the
+    field upstream already ships.
+    """
     record, jwk = _record_with_profile(TRACE_PROFILE_V0_2)
 
+    # Documented in LIMITATIONS.md: without a store or a bundle, non-revocation is
+    # unproven rather than disproven, and the result has to say which of the two.
     offline = verify_record(record, jwk)
-    assert offline.freshness_checked is True
-    assert offline.nonce_checked is False
-    # Documented in LIMITATIONS.md: without a store, non-revocation is unproven.
-    assert offline.revocation_checked is False
+    assert offline.revocation.outcome == "no_check_performed"
 
     nonce_key = generate_key()
     with_nonce = _fresh_record()
@@ -882,9 +1029,8 @@ def test_verification_statement_reports_check_coverage():
         expected_nonce="abc123",
         revocation=frozenset(),
     )
-    assert checked.freshness_checked is False
-    assert checked.nonce_checked is True
-    assert checked.revocation_checked is True
+    assert checked.revocation.outcome != "no_check_performed"
+    assert checked.profile == TRACE_PROFILE_V0_2
 
 
 # --- the parameter's own type, not the shape inside it ------------------------
@@ -942,3 +1088,40 @@ def test_the_record_type_is_checked_before_the_record_is_read():
     key = generate_key()
     with pytest.raises(ValueError, match="accepted_profiles is empty"):
         verify_record(None, key_to_jwk(key), accepted_profiles=())
+#: Values a caller can hand a function that documents an object argument. The last
+#: five are the ones a record assembled from parsed JSON can actually carry.
+_NOT_AN_OBJECT = ("a-string", 123, None, [1, 2], True, False, 0, "", b"bytes", 1.5)
+
+
+@pytest.mark.parametrize("value", _NOT_AN_OBJECT)
+def test_jwk_thumbprint_refuses_a_non_object_with_the_error_it_documents(value):
+    """`jwk_thumbprint` documents `ValueError` and read `.get` off its argument first.
+
+    A JWK reaches it from a peer, a key document, or a record's own `cnf`, so its shape
+    is not something the caller has established. Before this it raised `AttributeError`,
+    which a caller written against the documented contract does not catch.
+    """
+    with pytest.raises(ValueError):
+        jwk_thumbprint(value)
+
+
+@pytest.mark.parametrize("value", _NOT_AN_OBJECT)
+def test_verify_record_refuses_a_non_object_record_with_the_error_it_documents(value):
+    """Same shape, on the argument that is by definition untrusted.
+
+    `verify_record`'s docstring says every rejection other than a bad signature is a
+    `ValueError`. A non-object record reached `record.get("eat_profile")` and raised
+    `AttributeError` instead.
+    """
+    key = generate_key()
+    with pytest.raises(ValueError):
+        verify_record(value, key_to_jwk(key))
+
+
+def test_the_guards_do_not_refuse_what_they_should_accept():
+    """Without this, raising unconditionally would pass both tests above."""
+    key = generate_key()
+    record = sign_record(_fresh_record(), key)
+
+    jwk_thumbprint(key_to_jwk(key))
+    verify_record(record, key_to_jwk(key))

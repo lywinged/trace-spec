@@ -3,18 +3,17 @@
 The verifier consumes an explicit registry of named rules (``RULES``) rather than
 emitting failure codes inline. The registry is the inventory: every obligation this
 verifier enforces is one ``Rule`` entry, and the completeness suite in
-`test_vector_completeness.py` mutates registry entries by name — removing or weakening
-one hook at a time — to prove each rule is load-bearing for at least two independent
+`test_vector_completeness.py` mutates registry entries by name: removing or weakening
+one hook at a time: to prove each rule is load-bearing for at least two independent
 fixtures.
 
-That shape is deliberate, and it is the review outcome of upstream #124: an earlier
-revision recovered the rule inventory from this module's source by AST-walking for
-string literals appended to failure lists. The review's objection stands — ``append``
-vs ``extend``, constants, f-strings and refactors all create silent blind spots in a
-source-derived inventory. A registry the verifier itself consumes turns "add a rule
-without adding it to the inventory" from heuristically detectable into structurally
-difficult: a check that is not registered is a check that never runs, and an
-unregistered emission path is a guard failure, not a silent hole.
+That shape is the review outcome of #124: recovering the rule inventory from this
+module's source (by AST-walking for string literals appended to failure lists) stays
+blind to ``append`` vs ``extend``, constants, f-strings and refactors: a source-derived
+inventory can silently under-count. A registry the verifier itself consumes turns "add
+a rule without adding it to the inventory" from heuristically detectable into
+structurally difficult: a check that is not registered is a check that never runs, and
+an unregistered emission path is a guard failure, not a silent hole.
 """
 
 from __future__ import annotations
@@ -125,7 +124,7 @@ def _signature_invalid(signed: dict[str, Any], trusted_jwk: dict[str, str]) -> b
 @dataclass(frozen=True)
 class Rule:
     """One named obligation. ``check`` returns True when the defect it guards against
-    is observed in the fixture — i.e. True means the code is emitted."""
+    is observed in the fixture: i.e. True means the code is emitted."""
 
     code: str
     severity: str  # "failure" | "warning"
@@ -155,10 +154,11 @@ def _evidence_hash_mismatch(f: dict[str, Any]) -> bool:
 
 
 def _issuer_key_unknown(f: dict[str, Any]) -> bool:
-    # Spec section 3.3.1: a receipt whose issuer key is unknown to the verifier is
-    # unverified, not invalid. "Invalid" would claim evidence of a defect that an
-    # unpinned key does not provide; the structural checks still run, and any of them
-    # failing is positive evidence that does make the receipt invalid.
+    # Spec section 3.3.2: a receipt whose issuer key is unknown to the verifier is
+    # unverified, not invalid. An unpinned key is an inability to check, not
+    # evidence of forgery, so this is an advisory rather than a failure; the
+    # structural checks still run, and any of them failing is positive evidence
+    # that does make the receipt invalid.
     return _trusted_jwk(f, f["receipt"]) is None
 
 
@@ -498,10 +498,10 @@ def test_fixture_set_is_complete() -> None:
         "14-receipt-issuer-key-unknown.json",
         "15-receipt-from-future.json",
         "16-decision-not-in-enum.json",
-        # 17-30 are the second vector for every receipt rule (#124: two independent
-        # vectors each), placed against implementation shortcuts the first set
-        # cannot detect — prefix-true digests, case-variant identifiers, one-second
-        # boundaries, structural-but-wrong signatures, an explicit-null receipt.
+        # 17-30 are the second vector for every rule (#124: two independent vectors
+        # each), placed against implementation shortcuts the first set cannot detect:
+        # prefix-true digests, case-variant identifiers, one-second boundaries,
+        # structural-but-wrong signatures, an explicit-null receipt.
         "17-missing-receipt-explicit-null.json",
         "18-action-ref-tail-forged.json",
         "19-action-ref-mismatch-in-tail.json",

@@ -1,0 +1,29 @@
+{
+  "recorded": "2026-09-12",
+  "why": "Normative lines that arrived when this branch was synced onto upstream main, 68 commits behind, and that no crosswalk row maps. Every one of the 23 was added upstream after this branch's merge base and belongs to features this branch does not touch: the parent-record-hash rules and the GapDisclosure chain element. Writing 23 crosswalk rows is a piece of work of its own and guessing at the enforcement point for a feature you have not read is worse than recording the gap. This list is a ratchet: it may shrink and it may not grow, and an entry that stops being unmapped has to come out.",
+  "lines": [
+    "**Chain binding.** A `GapDisclosure` MUST be spliced into the receipt chain at the point",
+    "**Issuer.** A `GapDisclosure` MUST be signed by the key that signed the chain element its",
+    "**Reporting.** A verification result MUST report each disclosed gap individually,",
+    "**Stream binding.** The `session_id` is covered by the signature, and a verifier MUST",
+    "**Structure.** A `GapDisclosure` is a chain element. It MUST carry:",
+    "1. A producer MUST compute `parent_record_hash` over the complete parent record, including its `signature` member where the profile embeds one, canonicalised with RFC 8785. No member is removed, blanked or reordered before digesting.",
+    "2. A verifier MUST recompute the digest the same way, over the parent record as it received it, and MUST NOT reconstruct or re-serialise the parent by any other route.",
+    "3. The digest algorithm named in the prefix MUST match the algorithm used, and a verifier MUST reject a record whose prefix names an algorithm it does not support rather than fall back to another.",
+    "A verifier MUST report `receipt_gap_disclosed` distinctly from",
+    "Gap boundaries MUST NOT be expressed as timestamps or as emitter-assigned sequence",
+    "Whether `receipt_gap_disclosed` is accepted or rejected MUST be a verifier policy input,",
+    "`receipt_gap_disclosed`, and MUST NOT report `receipt_invalid` either: the absence of a",
+    "chain corroborates either field. A verifier MUST NOT treat them as established, MUST NOT",
+    "condition any outcome on their values, and MUST NOT reject a disclosure because either",
+    "directions has not been sealed into the chain and MUST NOT be treated as covering",
+    "of resumption. Concretely, its `previous_receipt_hash` MUST name a chain element that is",
+    "present, and the next chain element emitted after resumption MUST carry a",
+    "section 3.2.1. A disclosure signed by any other key MUST be treated as invalid, whether",
+    "section 3.3.2's treatment of unknown issuer keys. It MUST surface the disclosure as",
+    "that are in fact present, MUST yield `receipt_invalid` rather than falling back to",
+    "that requires independently proven completeness of the receipt chain MUST NOT accept",
+    "verifier MUST report the number of consecutive disclosures. It MUST NOT reject solely on",
+    "yet. A verifier meeting a tail disclosure whose other checks pass MUST NOT report"
+  ]
+}

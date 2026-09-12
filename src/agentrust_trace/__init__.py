@@ -1,4 +1,4 @@
-"""agentrust-trace — TRACE Trust Record models, validation, and signing."""
+"""agentrust-trace: TRACE Trust Record models, validation, and signing."""
 
 from importlib import metadata as _metadata
 
@@ -28,7 +28,6 @@ from agentrust_trace.models import (
 from agentrust_trace.sign import (
     DEFAULT_ACCEPTED_PROFILES,
     RevocationStore,
-    VerificationStatement,
     generate_key,
     jwk_thumbprint,
     key_to_jwk,
@@ -36,6 +35,11 @@ from agentrust_trace.sign import (
     load_signing_key,
     sign_record,
     verify_record,
+)
+from agentrust_trace.revocation import (
+    RevocationCheck,
+    VerificationResult,
+    check_bundle,
 )
 from agentrust_trace.validate import (
     iter_errors,
@@ -77,8 +81,10 @@ __all__ = [
     "TRACE_PROFILE_V0_2",
     "TrustRecord",
     "DEFAULT_ACCEPTED_PROFILES",
+    "RevocationCheck",
     "RevocationStore",
-    "VerificationStatement",
+    "VerificationResult",
+    "check_bundle",
     "SCHEMA",
     "iter_errors",
     "validate_json",

@@ -8,6 +8,7 @@ attached to an assertion describing a different execution entirely.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import pytest
@@ -16,6 +17,7 @@ from agentrust_trace.content_marking import (
     ASSERTION_LABEL,
     ContentMarkingError,
     RecordMismatch,
+    _digest,
     build_assertion,
     verify_assertion,
 )
@@ -152,6 +154,49 @@ def test_malformed_hash_is_refused() -> None:
         verify_assertion(a, _bytes(_record()))
 
 
+
+# --- record_bytes that are valid JSON but not an object --------------------
+#
+# json.loads(record_bytes).get(...) assumed the decoded value is a dict. Valid
+# JSON is not always an object -- an array, a string, a number, null, and a
+# bool are all valid top-level JSON -- and record_bytes is exactly the kind of
+# externally-sourced input (served at a URL, in verify_assertion's case) that
+# is not guaranteed to be shaped the way a caller expects.
+
+
+@pytest.mark.parametrize("bad_json", [b"[1,2,3]", b'"just a string"', b"42", b"null", b"true"])
+def test_build_assertion_refuses_non_object_json_instead_of_crashing(bad_json) -> None:
+    with pytest.raises(ContentMarkingError, match="must decode to a JSON object"):
+        build_assertion(bad_json, url=URL)
+
+
+def test_verify_assertion_refuses_non_object_record_at_the_url() -> None:
+    """The record at the URL matches the declared hash but is not an object.
+
+    Not reachable through this module's own build_assertion, which now refuses
+    to build an assertion over non-object bytes -- but verify_assertion is
+    written against the spec, not against this module's own producer, and a
+    peer implementation, or a corrupted/misconfigured server response, can
+    still bring a hash-matching non-object body here.
+    """
+    bad_json = b"[1,2,3]"
+    a = build_assertion(_bytes(_record()), url=URL)
+    a["data"]["record"]["hash"] = _digest(bad_json, "sha256")
+
+    with pytest.raises(ContentMarkingError, match="must decode to a JSON object"):
+        verify_assertion(a, bad_json)
+
+
+def test_verify_assertion_refuses_invalid_json_at_the_url() -> None:
+    """The bytes at the URL match the declared hash but are not JSON at all."""
+    garbage = b"not json at all {{{"
+    a = build_assertion(_bytes(_record()), url=URL)
+    a["data"]["record"]["hash"] = _digest(garbage, "sha256")
+
+    with pytest.raises(ContentMarkingError, match="is not JSON"):
+        verify_assertion(a, garbage)
+
+
 # --- optional anchor -------------------------------------------------------
 
 
@@ -163,3 +208,117 @@ def test_anchor_is_carried_when_given() -> None:
 def test_anchor_is_omitted_when_absent() -> None:
     """Omitted rather than null: an unanchored record has no entry to name."""
     assert "anchor" not in build_assertion(_bytes(_record()), url=URL)["data"]
+
+
+# --- record_bytes that are not bytes at all -----------------------------------
+#
+# build_assertion validates the type of record_bytes and verify_assertion did
+# not. The int case is the one worth a test of its own: bytes(5) is five zero
+# bytes, so the value was hashed, did not match, and the caller was told the
+# record at the URL had changed. That is a specific accusation about somebody
+# else's server, made confidently and with a digest attached, when the only
+# thing wrong was the argument.
+
+NOT_BYTES = [None, 5, 0, "a string", "", [], ["x"], {"a": 1}, True]
+
+
+@pytest.mark.parametrize("bad", NOT_BYTES)
+def test_verify_assertion_refuses_record_bytes_that_are_not_bytes(bad) -> None:
+    a = build_assertion(_bytes(_record()), url=URL)
+    with pytest.raises(ContentMarkingError, match="record_bytes must be the bytes retrieved"):
+        verify_assertion(a, bad)
+
+
+def test_an_int_no_longer_reports_a_record_mismatch() -> None:
+    """The failure this closes, named on its own so it cannot come back quietly.
+
+    RecordMismatch means "the URL is serving something else". Reporting it for a
+    caller's type error points the reader at the wrong party, and it is worse than
+    a crash for exactly that reason: a crash says the call was wrong.
+    """
+    a = build_assertion(_bytes(_record()), url=URL)
+    with pytest.raises(ContentMarkingError) as excinfo:
+        verify_assertion(a, 5)
+    assert not isinstance(excinfo.value, RecordMismatch)
+    assert "does not match the assertion" not in str(excinfo.value)
+
+
+def test_empty_bytes_are_refused_like_build_assertion_refuses_them() -> None:
+    a = build_assertion(_bytes(_record()), url=URL)
+    with pytest.raises(ContentMarkingError, match="record_bytes must be the bytes retrieved"):
+        verify_assertion(a, b"")
+
+
+# --- presence, not just agreement (#326) -----------------------------------
+#
+# `verify_assertion` compared the duplicated binding fields with `.get()` equality,
+# which establishes that two values agree and not that either exists. A peer-produced
+# assertion omitting `data.subject`, paired with a hash-matching record that also
+# omitted `subject`, compared `None` against `None` and verified.
+#
+# `build_assertion` refuses to build from an incomplete record, so these pairs are
+# constructed by hand: the defect is in what a consumer accepts from a peer, not in
+# what this producer emits.
+
+
+def _pair(record: dict, drop_from_assertion: tuple[str, ...] = ()) -> tuple[dict, bytes]:
+    """An assertion whose hash genuinely matches *record*, so the pair is self-consistent.
+
+    Without recomputing the hash the pair fails at the digest check and the presence
+    check is never reached, which would make every test below pass for the wrong reason.
+    """
+    record_bytes = _bytes(record)
+    assertion = build_assertion(_bytes(_record()), url=URL)
+    assertion["data"]["record"]["hash"] = (
+        "sha256:" + hashlib.sha256(record_bytes).hexdigest()
+    )
+    for field in drop_from_assertion:
+        assert field in assertion["data"], "the field must be present for its removal to count"
+        del assertion["data"][field]
+    return assertion, record_bytes
+
+
+@pytest.mark.parametrize("field", ["subject", "eat_profile"])
+def test_a_field_absent_from_both_sides_is_not_a_binding(field: str) -> None:
+    record = _record()
+    del record[field]
+    assertion, record_bytes = _pair(record, drop_from_assertion=(field,))
+    with pytest.raises(ContentMarkingError, match="required"):
+        verify_assertion(assertion, record_bytes)
+
+
+def test_both_fields_absent_from_both_sides_is_not_a_binding() -> None:
+    record = _record()
+    del record["subject"], record["eat_profile"]
+    assertion, record_bytes = _pair(record, drop_from_assertion=("subject", "eat_profile"))
+    with pytest.raises(ContentMarkingError, match="required"):
+        verify_assertion(assertion, record_bytes)
+
+
+@pytest.mark.parametrize("field", ["subject", "eat_profile"])
+def test_an_assertion_missing_a_required_field_does_not_accuse_the_server(field: str) -> None:
+    """The caller's assertion is malformed, so the reader must not be pointed at the URL.
+
+    Same principle as `test_an_int_no_longer_reports_a_record_mismatch`.
+    """
+    assertion, record_bytes = _pair(_record(), drop_from_assertion=(field,))
+    with pytest.raises(ContentMarkingError) as excinfo:
+        verify_assertion(assertion, record_bytes)
+    assert not isinstance(excinfo.value, RecordMismatch)
+
+
+@pytest.mark.parametrize("field", ["subject", "eat_profile"])
+def test_a_record_missing_a_required_field_is_a_record_mismatch(field: str) -> None:
+    """Here the URL really is serving something that is not a conformant record."""
+    record = _record()
+    del record[field]
+    assertion, record_bytes = _pair(record)
+    with pytest.raises(RecordMismatch, match="required"):
+        verify_assertion(assertion, record_bytes)
+
+
+def test_a_complete_pair_still_verifies() -> None:
+    """The control: presence checks must refuse nothing that used to bind."""
+    record = _record()
+    assertion = build_assertion(_bytes(record), url=URL)
+    assert verify_assertion(assertion, _bytes(record)) == record

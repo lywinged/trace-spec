@@ -138,6 +138,11 @@ it is also **the token that binds two verified artifacts together**. A function 
 handed one cannot be called on an unverified thing by accident. Two unrelated lines of work
 now point at the same object, which is worth saying on #116 rather than proposing again.
 
+*Correction, 2026-09-12.* The object is upstream's `VerificationResult`, not a
+`VerificationStatement` of this branch's own. Syncing onto main showed #271 had already
+added the type; obligation 3 became a `profile` field on it. The observation above is
+unaffected and is about the object rather than its name.
+
 **The honest limit, which must be stated wherever this is proposed.** Python cannot make
 such a statement unforgeable. Anyone can construct one by hand and pass it. What changes is
 that skipping verification stops being the default path and becomes a deliberate act that
