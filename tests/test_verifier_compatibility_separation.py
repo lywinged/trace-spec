@@ -15,27 +15,101 @@ rather than a flaw in how they were written:
 `schema/trace-claim.json` pins `eat_profile` with a `const`, so a record carrying any
 other profile is schema-invalid. Since upstream #156 made `verify_record` validate
 against that schema, every such record is refused by the schema whether or not the
-verifier implements a single profile rule. Vectors 02, 03, 05, 07 and 08 all carry
+verifier implements a single profile rule. Vectors 02, 03, 05, 07, 08 and 11 all carry
 exactly those records, and their `expected.statement` is null, so there is no second
-signal to separate on either.
+signal to separate on either. The rule underneath is exact in both directions and is
+asserted below: **a vector separates the null verifier if and only if its record is
+schema-valid.**
 
 The set was separating when it was written. #156 introduced a second gate covering the
 same inputs, and no vector was edited. **Verdict stability is not coverage stability:**
 a vector set has to be re-measured when the implementation changes, not only when the
 vectors do. This module is that measurement, recorded exactly so the number cannot
 drift in either direction unnoticed.
+
+## One mutation is not a measurement
+
+Everything above measures against a single wrong implementation: one that reverts the
+whole proposal. Killing it shows the vectors are not vacuous and nothing more. The
+question a reader actually has is which rows they may delete, and that is answered only
+by the fix a competent implementer would have written and that looks right.
+
+`PANEL` below is nine such near misses, each a plausible reading of #116 rather than an
+absence of one, and `SEPARATION` records what each one is caught by. Read down a column
+rather than across: a vector that is the only entry in some column is one nobody may
+delete, and a column that is empty is a wrong implementation this set cannot see.
+
+One column is empty. It is recorded in `SHORTFALLS` with the reason and the condition
+under which the reason expires, and `test_recorded_shortfalls_have_not_closed` fails
+when it does, which is the only way a shortfall gets revisited rather than inherited.
+
+Vector 09 is the one live vector with nothing unique to it, and it is kept: separation
+is not the only adequacy property. 09 carries the second vector for
+`unschemaed_profile_in_accepted_set`, which is the margin property recorded in
+`tests/test_adequacy_all_sets.py`, and a rule carried by one vector is what #124
+established as insufficient. A row can be redundant under one measurement and
+load-bearing under another, which is the argument for keeping both measurements rather
+than reducing the set to whichever one was run last.
 """
 from __future__ import annotations
 import base64
+import itertools
 import json
 import pathlib
 
 import pytest
 
 from agentrust_trace import sign as _sign
-from agentrust_trace.validate import validate_json
+from agentrust_trace.validate import profiles_with_schema, validate_json
 
 VECTORS = pathlib.Path(__file__).resolve().parents[1] / "examples/verifier-compatibility"
+
+V2 = "tag:agentrust-io.com,2026:trace-v0.2"
+V01 = "tag:agentrust.io,2026:trace-v0.1"
+SCHEMAED = profiles_with_schema()
+"""The profiles this build carries a schema for, read out of the packaged schema files
+rather than restated here.
+
+Restating it is how this module first got the relationship between the two declared-set
+rules backwards. `trace-v0.1.json` ships, so the v0.1 identifier *is* a profile this
+build can check, and the rule forbidding it in a declared set is therefore independent
+of the rule requiring every member to be checkable. A hardcoded `{V2}` made the second
+rule appear to subsume the first, and the panel below agreed with itself because both
+sides came from the same wrong constant.
+"""
+
+
+class Refused(Exception):
+    """A verifier declining to verify. The panel raises it; the real one raises
+    ValueError and InvalidSignature, and separation reads only the outcome."""
+
+
+def _base_checks(record: dict, trusted_jwk: dict) -> str:
+    """Everything every build on this codebase already does, before #116.
+
+    Two independent refusals of a non-v0.2 record, and the assertion below is the
+    positive control on the claim that they cover the same inputs: `verify_record`'s
+    own `eat_profile` check, and `validate_json` against a schema whose `eat_profile`
+    is a `const`. A vector carrying a non-v0.2 record measures these, not an obligation.
+    """
+    profile = record.get("eat_profile")
+    refused_by_profile_check = not (isinstance(profile, str) and profile == V2)
+    try:
+        validate_json(record)
+        refused_by_schema = False
+    except Exception:
+        refused_by_schema = True
+    assert refused_by_profile_check == refused_by_schema, (
+        f"the two gates disagree on {profile!r}: the module's account of why six "
+        "vectors separate nothing rests on them covering the same inputs"
+    )
+    if refused_by_profile_check:
+        raise Refused("gate")
+    signature = record["signature"]
+    body = _sign._canonical_bytes({k: v for k, v in record.items() if k != "signature"})
+    _sign._pubkey_from_jwk(trusted_jwk).verify(
+        base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4)), body)
+    return profile
 
 
 def null_verifier(record: dict, trusted_jwk: dict) -> None:
@@ -45,11 +119,7 @@ def null_verifier(record: dict, trusted_jwk: dict) -> None:
     returning rather than by describing what it established. A real implementation
     that simply had not read #116 looks like this.
     """
-    validate_json(record)
-    signature = record["signature"]
-    body = _sign._canonical_bytes({k: v for k, v in record.items() if k != "signature"})
-    _sign._pubkey_from_jwk(trusted_jwk).verify(
-        base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4)), body)
+    _base_checks(record, trusted_jwk)
 
 
 def _fixtures() -> dict[str, dict]:
@@ -121,3 +191,440 @@ def test_the_null_verifier_still_accepts_a_conformant_record() -> None:
     one."""
     null_verifier(*(lambda v: (v["record"], v["trusted_key"]))(
         _fixtures()["01-known-version-verified"]))
+
+
+def test_a_vector_separates_exactly_when_its_record_is_schema_valid() -> None:
+    """The structural rule, stated in the docstring, asserted in both directions.
+
+    It is the whole account of why six vectors are inert, and it is the rule that
+    decides what a rebuilt set may contain: a vector aimed at an obligation has to
+    carry a record the schema has no quarrel with, or it measures the schema.
+    """
+    fixtures = _fixtures()
+
+    def schema_valid(record: dict) -> bool:
+        try:
+            validate_json(record)
+            return True
+        except Exception:
+            return False
+
+    valid = {name for name, v in fixtures.items() if schema_valid(v["record"])}
+    separating = {name for name, v in fixtures.items() if _separates(v)}
+    assert valid == separating, (
+        "separation and schema-validity came apart.\n"
+        f"  schema-valid: {sorted(valid)}\n"
+        f"  separating  : {sorted(separating)}\n"
+        "Either a gate moved or a vector was rewritten; both invalidate the recorded "
+        "figure and the account of it in this module's docstring."
+    )
+    assert valid, "positive control: no record is schema-valid, so this proves nothing"
+
+
+# --------------------------------------------------------------------------------
+# The panel: wrong implementations, each a reading of #116 rather than an absence of
+# one. The rule they are built to is to mutate toward the near miss: reverting the
+# change tests only that the vectors are not vacuous, and the question a reader of the
+# set has is which rows carry their own weight. #124 gives the checkable form, that two
+# vectors are independent when one implementation defect makes one pass and the other
+# fail, and that injecting the defect is how you find out.
+# --------------------------------------------------------------------------------
+
+def _set_integrity(accepted: list[str]) -> None:
+    """Obligation 2 read as a constraint on the declared set rather than on the record."""
+    if not accepted:
+        raise Refused("no_accepted_profiles")
+    if V01 in accepted:
+        raise Refused("superseded_profile_in_accepted_set")
+    for entry in accepted:
+        if entry not in SCHEMAED:
+            raise Refused("unschemaed_profile_in_accepted_set")
+
+
+def _statement(profile: str, accepted: list[str]) -> dict:
+    return {"profile": profile, "accepted_profiles": list(accepted)}
+
+
+def _v_null(record, jwk, accepted):
+    """Has not read #116 at all."""
+    _base_checks(record, jwk)
+    return "verified", None
+
+
+def _v_membership(record, jwk, accepted):
+    """Obligation 2 exactly as the issue words it: "declares the set of versions it
+    supports and MUST refuse versions outside that set". A membership test, and
+    nothing about the declared set itself. Obligation 3 done properly."""
+    profile = _base_checks(record, jwk)
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+def _v_empty_is_wildcard(record, jwk, accepted):
+    """A membership test in which an empty declared set means "no restriction".
+    The allowlist bug, which is a configuration default rather than a typo."""
+    profile = _base_checks(record, jwk)
+    if accepted:
+        _set_integrity(accepted)
+        if profile not in accepted:
+            raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+def _integrity_at(accepted: list[str], index: int) -> None:
+    if not accepted:
+        raise Refused("no_accepted_profiles")
+    entry = accepted[index]
+    if entry == V01:
+        raise Refused("superseded_profile_in_accepted_set")
+    if entry not in SCHEMAED:
+        raise Refused("unschemaed_profile_in_accepted_set")
+
+
+def _v_first_member_only(record, jwk, accepted):
+    """Checks the declared set, but only its first member."""
+    profile = _base_checks(record, jwk)
+    _integrity_at(accepted, 0)
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+def _v_last_member_only(record, jwk, accepted):
+    """Checks the declared set, but only its last member."""
+    profile = _base_checks(record, jwk)
+    _integrity_at(accepted, -1)
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+def _v_schema_coverage_only(record, jwk, accepted):
+    """Every declared member must be checkable, and no rule against the v0.1
+    identifier. Independent of the next one because `trace-v0.1.json` ships, so v0.1
+    is checkable and this rule lets it through."""
+    profile = _base_checks(record, jwk)
+    if not accepted:
+        raise Refused("no_accepted_profiles")
+    for entry in accepted:
+        if entry not in SCHEMAED:
+            raise Refused("unschemaed_profile_in_accepted_set")
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+def _v_v01_rule_only(record, jwk, accepted):
+    """Never the v0.1 identifier, and no check that the rest are checkable."""
+    profile = _base_checks(record, jwk)
+    if not accepted:
+        raise Refused("no_accepted_profiles")
+    if V01 in accepted:
+        raise Refused("superseded_profile_in_accepted_set")
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+def _v_no_statement(record, jwk, accepted):
+    """Obligation 2 in full, obligation 3 absent: returns what upstream's
+    `VerificationResult` carries today, which is a revocation check and a thumbprint
+    and no profile."""
+    profile = _base_checks(record, jwk)
+    _set_integrity(accepted)
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", None
+
+
+def _v_hardcoded_profile(record, jwk, accepted):
+    """Obligations 2 and 3, with the statement's fields written as literals rather
+    than reported. Satisfies obligation 3's letter and observes nothing."""
+    profile = _base_checks(record, jwk)
+    _set_integrity(accepted)
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(V2, [V2])
+
+
+def _v_reference(record, jwk, accepted):
+    """Both obligations, honestly. The control: it must be separated by nothing."""
+    profile = _base_checks(record, jwk)
+    _set_integrity(accepted)
+    if profile not in accepted:
+        raise Refused("profile_not_accepted")
+    return "verified", _statement(profile, accepted)
+
+
+PANEL = {
+    "null: has not read #116": _v_null,
+    "obligation 2 as worded: a membership test": _v_membership,
+    "an empty declared set read as a wildcard": _v_empty_is_wildcard,
+    "declared set checked, first member only": _v_first_member_only,
+    "declared set checked, last member only": _v_last_member_only,
+    "no rule against the v0.1 identifier in the set": _v_schema_coverage_only,
+    "no rule that a declared member be checkable": _v_v01_rule_only,
+    "obligation 2 in full, obligation 3 absent": _v_no_statement,
+    "obligations 2 and 3, statement hardcoded": _v_hardcoded_profile,
+}
+
+
+def _panel_separates(verifier, vector: dict) -> bool:
+    """Outcome first, then every key the vector's statement expectation names.
+
+    Wider than `_separates`, which compares presence only. A verifier that returns a
+    statement saying the wrong thing is as non-conformant as one that returns none,
+    and obligation 3 is about what the statement says.
+    """
+    expected = vector["expected"]
+    try:
+        outcome, statement = verifier(
+            vector["record"], vector["trusted_key"],
+            vector["verifier"]["accepted_profiles"])
+    except Exception:
+        outcome, statement = "refused", None
+    if outcome != expected["outcome"]:
+        return True
+    want = expected.get("statement")
+    if want is None:
+        return False
+    if statement is None:
+        return True
+    return any(statement.get(key) != value for key, value in want.items())
+
+
+SEPARATION = {
+    "null: has not read #116": frozenset({
+        "01-known-version-verified",
+        "04-unschemaed-profile-refused",
+        "06-empty-accepted-set-refused",
+        "09-unschemaed-profile-first-in-set-refused",
+        "10-superseded-first-in-set-innocent-record-refused"}),
+    "obligation 2 as worded: a membership test": frozenset({
+        "04-unschemaed-profile-refused",
+        "09-unschemaed-profile-first-in-set-refused",
+        "10-superseded-first-in-set-innocent-record-refused"}),
+    "an empty declared set read as a wildcard": frozenset({
+        "06-empty-accepted-set-refused"}),
+    "declared set checked, first member only": frozenset({
+        "04-unschemaed-profile-refused"}),
+    "declared set checked, last member only": frozenset({
+        "09-unschemaed-profile-first-in-set-refused",
+        "10-superseded-first-in-set-innocent-record-refused"}),
+    "no rule against the v0.1 identifier in the set": frozenset({
+        "10-superseded-first-in-set-innocent-record-refused"}),
+    "no rule that a declared member be checkable": frozenset({
+        "04-unschemaed-profile-refused",
+        "09-unschemaed-profile-first-in-set-refused"}),
+    "obligation 2 in full, obligation 3 absent": frozenset({
+        "01-known-version-verified"}),
+    "obligations 2 and 3, statement hardcoded": frozenset(),
+}
+"""What each near miss is caught by. Read down a column rather than across: the rows
+that appear once are the ones whose deletion would cost coverage, and the entry whose
+value is empty is a wrong implementation this set cannot see at all."""
+
+
+SHORTFALLS = {
+    "obligations 2 and 3, statement hardcoded":
+        "This build carries a schema for exactly one profile, so exactly one declared "
+        "set is conformant and exactly one profile can appear in a conformant "
+        "statement. A literal and an observation print the same string. Expires when "
+        "a second profile schema ships, which is the decision recorded in #114.",
+}
+"""Wrong implementations no vector separates, with the reason and its expiry.
+
+Recorded rather than fixed, because no vector written against this build can fix
+them. The test below fails when one expires, so the set is revisited at that point
+instead of inheriting a figure that has quietly stopped being true.
+"""
+
+
+@pytest.mark.parametrize("label", sorted(PANEL))
+def test_the_panel_separation_is_exactly_what_is_recorded(label: str) -> None:
+    fixtures = _fixtures()
+    measured = frozenset(
+        name for name, v in fixtures.items() if _panel_separates(PANEL[label], v))
+    assert measured == SEPARATION[label], (
+        f"what {label!r} is caught by changed.\n"
+        f"  recorded: {sorted(SEPARATION[label])}\n"
+        f"  measured: {sorted(measured)}"
+    )
+
+
+def test_the_reference_verifier_is_separated_by_nothing() -> None:
+    """The control on the whole panel. A vector that separates an implementation
+    doing everything the proposal asks is testing something the proposal does not
+    ask for, and every count above would be inflated by it."""
+    caught = [name for name, v in _fixtures().items()
+              if _panel_separates(_v_reference, v)]
+    assert not caught, (
+        f"the reference implementation is separated by {caught}, so those vectors "
+        "encode something other than obligations 2 and 3")
+
+
+def test_recorded_shortfalls_have_not_closed() -> None:
+    """The ratchet. Fails when a shortfall stops being one.
+
+    A recorded shortfall is a promise to revisit, and a promise nothing checks is how
+    `3 of 8` survived #156. When this fails, the entry comes out of `SHORTFALLS` and
+    the vector that now separates goes in.
+    """
+    fixtures = _fixtures()
+    for label in SHORTFALLS:
+        caught = [name for name, v in fixtures.items()
+                  if _panel_separates(PANEL[label], v)]
+        assert not caught, (
+            f"recorded shortfall closed: {label!r} is now separated by {caught}.\n"
+            f"  recorded reason: {SHORTFALLS[label]}\n"
+            "Remove the entry and record what closed it."
+        )
+    assert SHORTFALLS, "positive control: an empty shortfall list asserts nothing"
+
+
+def test_every_panel_entry_is_either_caught_or_a_recorded_shortfall() -> None:
+    """No silent third category. A near miss that nothing catches is either written
+    down with its reason or it is an unrecorded hole."""
+    silent = {label for label, caught in SEPARATION.items()
+              if not caught and label not in SHORTFALLS}
+    assert not silent, (
+        f"these wrong implementations are separated by nothing and are not recorded "
+        f"as shortfalls: {sorted(silent)}")
+
+
+def test_exactly_one_declared_set_is_conformant_today() -> None:
+    """The fact every recorded shortfall reduces to, enumerated rather than argued.
+
+    While this returns one, obligation 3's statement content is untestable: a
+    conformant run has one profile to report and one declared set to report, so a
+    literal cannot be told from an observation. It is also why obligations 1 and 4
+    were deferred on #116, and why the rule against a superseded identifier in the
+    declared set cannot be separated from the rule against an unschemaed one.
+    """
+    universe = [V2, V01, "tag:example.com,2025:trace-v0.0",
+                "tag:agentrust-io.com,2031:trace-v9.9"]
+    subsets = [c for r in range(len(universe) + 1)
+               for c in itertools.combinations(universe, r)]
+    assert len(subsets) == 16, "positive control: the enumeration is not running"
+
+    def conformant(accepted: tuple[str, ...]) -> bool:
+        try:
+            _set_integrity(list(accepted))
+            return True
+        except Refused:
+            return False
+
+    ok = [list(c) for c in subsets if conformant(c)]
+    assert ok == [[V2]], (
+        f"the conformant declared sets are now {ok}. More than one means the "
+        "shortfalls recorded above may have expired; fewer means nothing verifies.")
+
+
+def test_the_two_declared_set_rules_are_independently_observable() -> None:
+    """Vectors 09 and 10 pin different rules, and this is what proves it.
+
+    They look like duplicates: both put an inadmissible entry first in the declared
+    set, both expect a refusal, both are caught by the same three panel entries. The
+    question is whether an implementation can hold one rule and drop the other, and
+    the answer turns on a fact that has to be read out of the build rather than
+    assumed: `trace-v0.1.json` ships, so the v0.1 identifier is a profile this build
+    can check. The rule forbidding it in a declared set is therefore not a special
+    case of the rule requiring every member to be checkable.
+
+    This test asserted the opposite when it was written, and passed, because the panel
+    restated the schema-coverage set as a literal instead of reading
+    `profiles_with_schema()`. Both sides of the comparison came from the same wrong
+    constant. Recorded here because it is the defect the issue is about, committed by
+    the module written to detect it.
+    """
+    fixtures = _fixtures()
+
+    def schema_coverage_only(record, jwk, accepted):
+        """Every declared member must be checkable. No v0.1 rule at all."""
+        profile = _base_checks(record, jwk)
+        if not accepted:
+            raise Refused("no_accepted_profiles")
+        for entry in accepted:
+            if entry not in SCHEMAED:
+                raise Refused("unschemaed_profile_in_accepted_set")
+        if profile not in accepted:
+            raise Refused("profile_not_accepted")
+        return "verified", _statement(profile, accepted)
+
+    def v01_rule_only(record, jwk, accepted):
+        """Never the v0.1 identifier. No schema-coverage check."""
+        profile = _base_checks(record, jwk)
+        if not accepted:
+            raise Refused("no_accepted_profiles")
+        if V01 in accepted:
+            raise Refused("superseded_profile_in_accepted_set")
+        if profile not in accepted:
+            raise Refused("profile_not_accepted")
+        return "verified", _statement(profile, accepted)
+
+    assert V01 in SCHEMAED, (
+        "positive control: the whole argument rests on the v0.1 identifier being a "
+        "profile this build carries a schema for, which is why `trace-v0.1.json` "
+        "ships. If that stops being true the two rules collapse into one and vector "
+        "10 stops pinning anything of its own.")
+
+    dropped_v01 = {n for n, v in fixtures.items()
+                   if _panel_separates(schema_coverage_only, v)}
+    dropped_coverage = {n for n, v in fixtures.items()
+                        if _panel_separates(v01_rule_only, v)}
+    assert dropped_v01 == {"10-superseded-first-in-set-innocent-record-refused"}, (
+        f"dropping the v0.1 rule is caught by {sorted(dropped_v01)}")
+    assert dropped_coverage == {"04-unschemaed-profile-refused",
+                                "09-unschemaed-profile-first-in-set-refused"}, (
+        f"dropping schema coverage is caught by {sorted(dropped_coverage)}")
+    assert not (dropped_v01 & dropped_coverage), (
+        "the two rules are caught by the same vectors, so the set cannot tell them "
+        "apart and should not be read as testing two")
+
+
+# Nominal margin and separating margin, per rule this set names. `KNOWN_THIN` in
+# `tests/test_adequacy_all_sets.py` records which rules are carried by a single vector,
+# which is #124's property. It counts vectors. Three rules here have two vectors and
+# fewer than two that separate anything, so the margin they report is made of vectors a
+# defect in the rule would not move. Recorded rather than repaired: the vectors that do
+# not separate are the gate-covered ones, and no vector written against this build can
+# separate them. The cross-set instrument is left alone; this is a fact about this set.
+MARGIN = {
+    "no_accepted_profiles":               (1, 1),
+    "profile_absent":                     (2, 0),
+    "profile_not_accepted":               (2, 0),
+    "superseded_profile_in_accepted_set": (2, 1),
+    "superseded_profile_refused":         (1, 0),
+    "unschemaed_profile_in_accepted_set": (2, 2),
+    "verified":                           (1, 1),
+}
+
+
+def test_margin_measured_in_separating_vectors_is_what_is_recorded() -> None:
+    """Two vectors for a rule are two only if a defect in that rule moves both.
+
+    #124 defines two vectors as independent when a single implementation defect makes
+    one pass and the other fail, and observes that the definition is mechanically
+    checkable by injecting the defect. `PANEL` is that injection. Running it against
+    the rules rather than against the set is how a rule with two vectors and one
+    discriminating vector becomes visible, which counting vectors cannot show.
+    """
+    fixtures = _fixtures()
+    separating = {name for name in fixtures
+                  if any(_panel_separates(PANEL[label], fixtures[name])
+                         for label in PANEL)}
+    measured: dict[str, tuple[int, int]] = {}
+    for name, vector in fixtures.items():
+        rule = vector["expected"]["failure"] or "verified"
+        total, sep = measured.get(rule, (0, 0))
+        measured[rule] = (total + 1, sep + (1 if name in separating else 0))
+    assert measured == MARGIN, (
+        "margin moved.\n"
+        f"  recorded: {dict(sorted(MARGIN.items()))}\n"
+        f"  measured: {dict(sorted(measured.items()))}\n"
+        "The first number is vectors naming the rule, the second is how many of them "
+        "any wrong implementation in the panel is caught by.")
+    assert any(sep < total for total, sep in MARGIN.values()), (
+        "positive control: if no rule had a nominal margin above its separating "
+        "margin, this test would be asserting a tautology")

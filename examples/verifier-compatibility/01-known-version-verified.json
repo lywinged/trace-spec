@@ -60,8 +60,7 @@
       "profile": "tag:agentrust-io.com,2026:trace-v0.2",
       "accepted_profiles": [
         "tag:agentrust-io.com,2026:trace-v0.2"
-      ],
-      "downgraded": false
+      ]
     }
   }
 }

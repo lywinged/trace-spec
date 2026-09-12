@@ -121,7 +121,6 @@ def main() -> None:
                     "statement": {
                         "profile": V0_2,
                         "accepted_profiles": [V0_2],
-                        "downgraded": False,
                     },
                 },
             ),

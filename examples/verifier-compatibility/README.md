@@ -54,14 +54,18 @@ Nothing in a fixture names a language or an API:
   "expected": {
     "outcome":   "verified" | "refused",
     "failure":   null | "profile_not_accepted" | "profile_absent" | "no_accepted_profiles",
-    "statement": null | { "profile": "...", "accepted_profiles": [...], "downgraded": false }
+    "statement": null | { "profile": "...", "accepted_profiles": [...] }
   }
 }
 ```
 
-`downgraded` is true when the profile verified under is not the first entry of the
-accepted set. An implementation may name that field anything, or derive it, as long as
-a reader of the statement can tell a fallback happened.
+The statement carried a third key, `downgraded`, until 2026-09-12. It was removed
+rather than implemented. Disclosure of a downgrade is obligation 4 of #116, which is
+deferred there as unobservable, and no result type in this package carries such a
+field; the adapter was deriving the value from the two keys above and comparing it
+against the vector's own declaration, so the assertion held for every implementation
+and could not fail. A key no implementation reports, tested by an assertion that
+cannot fail, is a claim to test obligation 4 that this set does not make good on.
 
 `tests/test_verifier_compatibility_fixtures.py` is the adapter that runs these against
 `agentrust_trace`. Another implementation writes its own adapter and runs the same JSON;

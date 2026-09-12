@@ -101,11 +101,14 @@ def test_verifier_compatibility_vector(fixture_path: Path) -> None:
     assert statement.profile == want["profile"]
     assert list(statement.accepted_profiles) == want["accepted_profiles"]
 
-    # "Downgraded" is a property of the vector, not of this API: the run used a
-    # profile other than the newest the verifier declared. A conformant verifier has
-    # to be able to report it, however it names the field.
-    downgraded = statement.profile != want["accepted_profiles"][0]
-    assert downgraded == want["downgraded"]
+    # Every key the vector names is compared, and nothing is derived here. A key the
+    # adapter computes from the statement it was just handed is compared against
+    # itself: that is how `downgraded` sat in this set asserting nothing until
+    # 2026-09-12. If a future key cannot be read off the result, it does not belong
+    # in the expectation.
+    assert set(want) == {"profile", "accepted_profiles"}, (
+        f"{fixture_path.name}: the statement expectation names {sorted(want)}; this "
+        "adapter reads two keys and would silently ignore the rest")
 
 
 def test_every_fixture_signature_is_genuine() -> None:
