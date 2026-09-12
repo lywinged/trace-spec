@@ -71,6 +71,19 @@ against the vector's own declaration, so the assertion held for every implementa
 and could not fail. A key no implementation reports, tested by an assertion that
 cannot fail, is a claim to test obligation 4 that this set does not make good on.
 
+`failure` names **which rule refused**, not a wire format or a message. An adapter maps
+it to whatever its own implementation emits; this one does so in `FAILURE_MARKERS`.
+
+Worth saying plainly, because the set is stricter here than the text it encodes: the
+draft in `proposals/116-verifier-compatibility-normative.md` says a verifier SHOULD
+report refusal-for-an-unimplemented-profile distinguishably from a verification failure,
+which is coarser and is a SHOULD, and it declines to mandate any field name. Every
+refusal vector here nonetheless states a rule and the adapter asserts it. A verifier that
+applies all four obligations and reports one generic label for every refusal is caught by
+four of these vectors and is not obviously non-conformant to the draft. Whether the text
+gains a requirement or `failure` becomes informative is the maintainer's call;
+`tests/test_verifier_compatibility_separation.py` measures what the set does today.
+
 `tests/test_verifier_compatibility_fixtures.py` is the adapter that runs these against
 `agentrust_trace`. Another implementation writes its own adapter and runs the same JSON;
 that is the point of keeping the expectations out of the test code.
