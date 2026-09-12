@@ -428,7 +428,8 @@ value is empty is a wrong implementation this set cannot see at all."""
 
 SHORTFALLS = {
     "obligations 2 and 3, statement hardcoded":
-        "This build carries a schema for exactly one profile, so exactly one declared "
+        "This build carries a schema for two profiles and every conformant declared "
+        "set must exclude one of them, the v0.1 identifier, so exactly one declared "
         "set is conformant and exactly one profile can appear in a conformant "
         "statement. A literal and an observation print the same string. Expires when "
         "a second profile schema ships, which is the decision recorded in #114.",
@@ -503,15 +504,34 @@ def test_every_panel_entry_is_either_caught_or_a_recorded_shortfall() -> None:
         f"as shortfalls: {sorted(silent)}")
 
 
-DECLARED_SET_UNIVERSE = (
-    V2, V01, "tag:example.com,2025:trace-v0.0", "tag:agentrust-io.com,2031:trace-v9.9")
-"""A profile of each kind a declared set could name: current, superseded, an unschemaed
-third party, an unschemaed future. Sixteen subsets."""
+UNCHECKABLE_PROBES = (
+    "tag:example.com,2025:trace-v0.0", "tag:agentrust-io.com,2031:trace-v9.9")
+"""Two profiles this build carries no schema for: a third party's and a future one.
+Fixed, because "a profile the build cannot check" is not something the build can
+enumerate for itself."""
+
+
+def _declared_set_universe() -> tuple[str, ...]:
+    """Every profile a declared set could name, read from the build where it can be.
+
+    Hardcoding this list is what let the ratchet below sleep through its own expiry.
+    `SHORTFALLS` says its entry expires when a second usable profile schema ships, and
+    a hardcoded universe cannot contain a profile that does not exist yet, so shipping
+    one left every count unchanged and every test green. Checked by mutation: adding a
+    `trace-v0.3` schema to the package now widens this and fails three tests.
+    """
+    return tuple(sorted(SCHEMAED)) + UNCHECKABLE_PROBES
+
+
+DECLARED_SET_UNIVERSE = _declared_set_universe()
+"""Four members today, so sixteen subsets: v0.1 and v0.2 from the packaged schemas,
+plus the two probes."""
 
 
 def _declared_sets() -> list[tuple[str, ...]]:
-    return [c for r in range(len(DECLARED_SET_UNIVERSE) + 1)
-            for c in itertools.combinations(DECLARED_SET_UNIVERSE, r)]
+    universe = _declared_set_universe()
+    return [c for r in range(len(universe) + 1)
+            for c in itertools.combinations(universe, r)]
 
 
 def _conformant_declared_sets() -> list[list[str]]:
@@ -586,27 +606,116 @@ def test_the_two_declared_set_rules_are_independently_observable() -> None:
         "apart and should not be read as testing two")
 
 
-def test_membership_is_never_the_sole_cause_of_a_refusal() -> None:
-    """Obligation 2 as issue 116 words it, and what it is observable through.
+def _membership_only(accepted: list[str], record: dict, jwk: dict) -> tuple[str, str | None]:
+    """Obligation 2 exactly as issue 116 words it, and nothing more.
 
-    The issue says a verifier "declares the set of versions it supports and MUST refuse
-    versions outside that set", which is a membership test. A vector isolates that rule
-    only where membership refuses and every other rule accepts. There is no such
-    declared set: a record outside the set is already schema-invalid, since the const
-    admits one profile, and the empty set is refused by its own rule first.
-
-    Every row of the set that pins obligation 2 therefore pins a constraint on the
-    declared set, which is stronger than the sentence in the issue. Recorded here so
-    that the claim is reproducible rather than asserted in a thread.
+    "declares the set of versions it supports and MUST refuse versions outside that
+    set". A membership test over the record's profile, with no rule about the set.
     """
-    sets = _declared_sets()
-    assert len(sets) == 16, "positive control: the enumeration is not running"
-    # The record is necessarily v0.2: the const admits no other schema-valid record.
-    isolating = [list(c) for c in sets
-                 if V2 not in c and list(c) in _conformant_declared_sets()]
-    assert not isolating, (
-        f"membership is now isolable in {isolating}, so obligation 2 as worded has a "
-        "vector of its own and the stronger reading is no longer the only testable one")
+    try:
+        profile = _base_checks(record, jwk)
+    except Exception:
+        return "refused", "gate"
+    if profile not in accepted:
+        return "refused", "profile_not_accepted"
+    return "verified", None
+
+
+def _stronger_reading(accepted: list[str], record: dict, jwk: dict) -> tuple[str, str | None]:
+    """Obligation 2 as this set actually pins it: constraints on the declared set,
+    checked before membership, which is the order `verify_record` uses."""
+    try:
+        profile = _base_checks(record, jwk)
+    except Exception:
+        return "refused", "gate"
+    try:
+        _set_integrity(list(accepted))
+    except Refused as exc:
+        return "refused", str(exc)
+    if profile not in accepted:
+        return "refused", "profile_not_accepted"
+    return "verified", None
+
+
+# How the two readings of obligation 2 divide the sixteen declared sets, against an
+# ordinary schema-valid v0.2 record. Recorded rather than argued, because the whole
+# question put to the maintainer is which of the two a vector should encode.
+#
+# An earlier version of this module asserted that membership is never the sole cause of
+# a refusal, and proved it by filtering the sixteen sets through `_set_integrity` first.
+# That is the stronger reading, so the claim was the conclusion: the filter left an
+# empty domain and the assertion could not fail. Against a verifier that implements
+# membership and nothing else, membership is the sole cause in eight of the sixteen.
+READINGS = {
+    "opposite verdicts": 7,       # membership verifies, the stronger reading refuses
+    "same verdict, different reason": 8,
+    "identical": 1,               # only [v0.2] itself
+}
+
+
+def test_the_two_readings_of_obligation_2_disagree_on_seven_of_sixteen() -> None:
+    """The two readings are not "one testable and one not". They are mutually
+    exclusive about the same configurations, and a vector states one outcome.
+
+    On every one of the seven, the membership reading verifies and the stronger
+    reading refuses, so the stronger reading is strictly the more refusing of the two.
+    That is what a vector encodes when it says `refused`, and it is why the choice
+    between the readings cannot be deferred past the fixtures.
+    """
+    fixture = _fixtures()["01-known-version-verified"]
+    record, jwk = fixture["record"], fixture["trusted_key"]
+
+    tally = dict.fromkeys(READINGS, 0)
+    opposite: list[list[str]] = []
+    for combo in _declared_sets():
+        accepted = list(combo)
+        m_outcome, m_reason = _membership_only(accepted, record, jwk)
+        s_outcome, s_reason = _stronger_reading(accepted, record, jwk)
+        if m_outcome != s_outcome:
+            tally["opposite verdicts"] += 1
+            opposite.append(accepted)
+            assert (m_outcome, s_outcome) == ("verified", "refused"), (
+                f"{accepted}: the stronger reading is supposed to be the more refusing "
+                f"of the two, and here it is not ({m_outcome} vs {s_outcome})")
+        elif m_reason != s_reason:
+            tally["same verdict, different reason"] += 1
+        else:
+            tally["identical"] += 1
+
+    assert tally == READINGS, f"the split moved.\n  recorded: {READINGS}\n  measured: {tally}"
+    assert sum(READINGS.values()) == len(_declared_sets()), "the three buckets must partition"
+    # Positive control: the record has to be one the gates accept, or every set lands in
+    # "identical" by being refused before either reading is reached.
+    assert _membership_only([V2], record, jwk) == ("verified", None), (
+        "control: the reference record is refused by the pre-116 gates, so this test is "
+        "comparing two readings neither of which ever runs")
+    # Every set the two readings disagree about contains v0.2 alongside something the
+    # stronger rules refuse. Stated so the seven are not a bare number.
+    assert all(V2 in a and len(a) > 1 for a in opposite), (
+        f"the disagreements are no longer 'v0.2 plus an inadmissible entry': {opposite}")
+
+
+def test_the_set_encodes_the_stronger_reading_on_two_of_the_seven() -> None:
+    """Which side of that disagreement the committed fixtures already take.
+
+    Vectors 04, 09 and 10 carry declared sets drawn from the seven, and all three
+    expect a refusal, which is the stronger reading's answer. As set values they are
+    two of the seven, since 04 and 09 differ only in the order of the same two members.
+    A reader deciding the ruling should know the fixtures are not neutral.
+    """
+    fixtures = _fixtures()
+    encoded = {}
+    for name in ("04-unschemaed-profile-refused",
+                 "09-unschemaed-profile-first-in-set-refused",
+                 "10-superseded-first-in-set-innocent-record-refused"):
+        vector = fixtures[name]
+        accepted = vector["verifier"]["accepted_profiles"]
+        assert V2 in accepted and len(accepted) > 1, f"{name} is not one of the seven"
+        assert vector["expected"]["outcome"] == "refused", (
+            f"{name} no longer expects the stronger reading's answer")
+        encoded[frozenset(accepted)] = vector["expected"]["failure"]
+    assert len(encoded) == 2, (
+        f"expected two distinct declared sets across those three vectors, got {len(encoded)}")
 
 
 def test_exactly_one_declared_set_is_conformant_today() -> None:

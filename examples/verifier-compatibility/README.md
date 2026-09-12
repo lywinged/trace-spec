@@ -53,7 +53,9 @@ Nothing in a fixture names a language or an API:
   "record":      { "eat_profile": "...", "signature": "..." },
   "expected": {
     "outcome":   "verified" | "refused",
-    "failure":   null | "profile_not_accepted" | "profile_absent" | "no_accepted_profiles",
+    "failure":   null | "profile_not_accepted" | "profile_absent" | "no_accepted_profiles"
+               | "superseded_profile_refused" | "superseded_profile_in_accepted_set"
+               | "unschemaed_profile_in_accepted_set",
     "statement": null | { "profile": "...", "accepted_profiles": [...] }
   }
 }

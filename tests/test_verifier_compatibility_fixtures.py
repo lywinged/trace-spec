@@ -39,6 +39,42 @@ FAILURE_MARKERS = {
 
 V0_1 = "tag:agentrust.io,2026:trace-v0.1"
 
+# Which failure labels are a complaint about a specific member of the declared set,
+# and how to find the member the message has to name. A rule name is not an entry: a
+# verifier that reported `unschemaed_profile_in_accepted_set` without saying which
+# profile it meant would leave the operator to diff their own configuration.
+#
+# This exists because the proposal's table states, for three of its rows, that the
+# refusal names the entry, and until 2026-09-12 nothing here asserted it. The
+# implementation does interpolate the entry; a change that stopped would have left
+# every vector green and the table's third column false. Same shape as the
+# `downgraded` key removed the same day.
+NAMES_AN_ENTRY = {
+    "unschemaed_profile_in_accepted_set":
+        lambda accepted: [p for p in accepted if p not in profiles_with_schema()],
+    "superseded_profile_in_accepted_set":
+        lambda accepted: [p for p in accepted if p == V0_1],
+}
+
+
+def _assert_the_refusal_names_the_entry(fixture_path, expected, verifier, error):
+    """For a complaint about the declared set, the message must name the member."""
+    find = NAMES_AN_ENTRY.get(expected["failure"])
+    if find is None:
+        return
+    offending = find(verifier["accepted_profiles"])
+    assert offending, (
+        f"{fixture_path.name}: expected {expected['failure']!r} but no member of "
+        f"{verifier['accepted_profiles']} is the kind of entry that label describes, "
+        "so this vector cannot be checking what it says")
+    text = str(error)
+    missing = [p for p in offending if p not in text]
+    assert not missing, (
+        f"{fixture_path.name}: the refusal does not name {missing}. The label alone "
+        "tells an operator which rule fired and not which entry of their declared set "
+        "tripped it, which is what the proposal's table promises.")
+
+
 FIXTURE_PATHS = sorted(FIXTURE_DIR.glob("*.json"))
 
 
@@ -89,6 +125,7 @@ def test_verifier_compatibility_vector(fixture_path: Path) -> None:
             f"{fixture_path.name}: refused for the wrong reason. "
             f"expected {expected['failure']!r}, got: {excinfo.value}"
         )
+        _assert_the_refusal_names_the_entry(fixture_path, expected, verifier, excinfo.value)
         return
 
     statement = verify_record(
@@ -114,7 +151,7 @@ def test_verifier_compatibility_vector(fixture_path: Path) -> None:
 def test_every_fixture_signature_is_genuine() -> None:
     """No vector may pass or fail because its signature was malformed.
 
-    All seven records are correctly signed. If one were not, a "refused" expectation
+    All eleven records are correctly signed. If one were not, a "refused" expectation
     could be satisfied by the signature check rather than by the profile rule, and the
     vector would silently stop testing what it claims to test.
     """
