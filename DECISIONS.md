@@ -80,7 +80,7 @@ all four. `models.py` and `__init__.py` are upstream's plus this fork's two prof
 constants: upstream had moved on with `origin` and the `declared` enforcement mode, which
 a wholesale copy would have dropped. `sign.py` and `test_sign.py` are this fork's richer
 `accepted_profiles` version, which supersedes the minimal cutover check upstream took from
-`#125`: that supersession was predicted in `CLAUDE.md` §5 when `#125` was offered. All
+`#125`, a supersession that was anticipated when `#125` was offered. All
 four merged cleanly under a three-way merge against `a817621`, which is where the two
 histories last agreed.
 
