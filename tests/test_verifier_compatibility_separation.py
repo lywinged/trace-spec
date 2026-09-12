@@ -711,8 +711,9 @@ def _declared_set_universe() -> tuple[str, ...]:
 
 
 DECLARED_SET_UNIVERSE = _declared_set_universe()
-"""Four members today, so sixteen subsets: v0.1 and v0.2 from the packaged schemas,
-plus the two probes."""
+"""Four members today, so sixteen subsets: v0.1 and v0.2 from the packaged schemas, plus
+the two probes. Both halves move -- a shipped schema widens the first, and the probe list
+is a choice made here -- so nothing downstream restates either number as a literal."""
 
 
 def test_the_declared_set_universe_is_a_set_and_still_has_an_uncheckable_member() -> None:
@@ -846,30 +847,50 @@ def _stronger_reading(accepted: list[str], record: dict, jwk: dict) -> tuple[str
     return "verified", None
 
 
-# How the two readings of obligation 2 divide the sixteen declared sets, against an
-# ordinary schema-valid v0.2 record. Recorded rather than argued, because the whole
-# question put to the maintainer is which of the two a vector should encode.
-#
-# An earlier version of this module asserted that membership is never the sole cause of
-# a refusal, and proved it by filtering the sixteen sets through `_set_integrity` first.
-# That is the stronger reading, so the claim was the conclusion: the filter left an
-# empty domain and the assertion could not fail. Against a verifier that implements
-# membership and nothing else, membership is the sole cause in eight of the sixteen.
-READINGS = {
-    "opposite verdicts": 7,       # membership verifies, the stronger reading refuses
-    "same verdict, different reason": 8,
-    "identical": 1,               # only [v0.2] itself
-}
+def _readings_split(universe_size: int) -> dict[str, int]:
+    """How the two readings of obligation 2 divide the declared sets, in closed form.
+
+    These were three literals, 7 and 8 and 1 over sixteen sets, and they read as a
+    measurement. They are not one. Every set containing v0.2 verifies under membership,
+    and of those exactly one, `[v0.2]` itself, survives `_set_integrity`, so the two
+    readings give opposite verdicts on `2**(n-1) - 1` sets out of `2**n`, always. The
+    figure is fixed by how many probes `UNCHECKABLE_PROBES` happens to carry and says
+    nothing about #116, the vector set, or which reading is right: one probe gives
+    3 of 8, five probes give 63 of 128. Verified against the enumeration at every
+    universe size from two to seven by
+    `test_the_readings_split_is_arithmetic_not_a_measurement`.
+
+    What the enumeration does establish is the direction, which is universe-independent
+    and is the claim the ruling turns on: wherever they disagree, membership verifies
+    and the stronger reading refuses. A vector saying `refused` takes the stronger
+    reading's side, so the choice between the two cannot be deferred past the fixtures.
+
+    An earlier version of this module instead asserted that membership is never the sole
+    cause of a refusal, and proved it by filtering the sets through `_set_integrity`
+    first. That is the stronger reading, so the claim was its own premise: the filter
+    left an empty domain and the assertion could not fail. Against a verifier that
+    implements membership and nothing else, membership is the sole cause in half of
+    them.
+    """
+    return {
+        "opposite verdicts": 2 ** (universe_size - 1) - 1,
+        "same verdict, different reason": 2 ** (universe_size - 1),
+        "identical": 1,               # only [v0.2] itself
+    }
 
 
-def test_the_two_readings_of_obligation_2_disagree_on_seven_of_sixteen() -> None:
+READINGS = _readings_split(len(DECLARED_SET_UNIVERSE))
+
+
+def test_the_two_readings_of_obligation_2_are_mutually_exclusive() -> None:
     """The two readings are not "one testable and one not". They are mutually
     exclusive about the same configurations, and a vector states one outcome.
 
-    On every one of the seven, the membership reading verifies and the stronger
-    reading refuses, so the stronger reading is strictly the more refusing of the two.
-    That is what a vector encodes when it says `refused`, and it is why the choice
-    between the readings cannot be deferred past the fixtures.
+    Wherever they disagree the membership reading verifies and the stronger reading
+    refuses, so the stronger reading is strictly the more refusing of the two. That is
+    what a vector encodes when it says `refused`, and it is why the choice between the
+    readings cannot be deferred past the fixtures. The direction is the finding; the
+    count is arithmetic, for which see `_readings_split`.
     """
     fixture = _fixtures()["01-known-version-verified"]
     record, jwk = fixture["record"], fixture["trusted_key"]
@@ -899,18 +920,59 @@ def test_the_two_readings_of_obligation_2_disagree_on_seven_of_sixteen() -> None
         "control: the reference record is refused by the pre-116 gates, so this test is "
         "comparing two readings neither of which ever runs")
     # Every set the two readings disagree about contains v0.2 alongside something the
-    # stronger rules refuse. Stated so the seven are not a bare number.
+    # stronger rules refuse. This is the reason for the closed form in `_readings_split`
+    # and it is what makes the count arithmetic rather than evidence.
     assert all(V2 in a and len(a) > 1 for a in opposite), (
         f"the disagreements are no longer 'v0.2 plus an inadmissible entry': {opposite}")
 
 
-def test_the_set_encodes_the_stronger_reading_on_two_of_the_seven() -> None:
+def test_the_readings_split_is_arithmetic_not_a_measurement() -> None:
+    """`_readings_split`'s closed form against the enumeration it replaces.
+
+    Run at every universe size from two to seven, with synthetic probes, so the claim
+    that the figure is forced by the probe count is checked rather than asserted. If
+    this holds, no number in `READINGS` carries information about #116 and none of them
+    belongs in an argument about which reading a vector should encode.
+    """
+    fixture = _fixtures()["01-known-version-verified"]
+    record, jwk = fixture["record"], fixture["trusted_key"]
+    seen = {}
+    for probe_count in range(6):
+        probes = tuple(f"tag:example.test,2026:readings-probe-{i}" for i in range(probe_count))
+        assert not set(probes) & set(SCHEMAED), "a synthetic probe collided with a real profile"
+        universe = tuple(sorted(SCHEMAED)) + probes
+        tally = dict.fromkeys(READINGS, 0)
+        for size in range(len(universe) + 1):
+            for combo in itertools.combinations(universe, size):
+                accepted = list(combo)
+                m_outcome, m_reason = _membership_only(accepted, record, jwk)
+                s_outcome, s_reason = _stronger_reading(accepted, record, jwk)
+                if m_outcome != s_outcome:
+                    tally["opposite verdicts"] += 1
+                elif m_reason != s_reason:
+                    tally["same verdict, different reason"] += 1
+                else:
+                    tally["identical"] += 1
+        assert tally == _readings_split(len(universe)), (
+            f"universe of {len(universe)}: the closed form says "
+            f"{_readings_split(len(universe))} and the enumeration says {tally}")
+        seen[len(universe)] = tally["opposite verdicts"]
+    assert seen == {2: 1, 3: 3, 4: 7, 5: 15, 6: 31, 7: 63}, (
+        f"positive control: the disagreement count is supposed to double with each "
+        f"added probe and here it went {seen}")
+
+
+def test_the_committed_fixtures_already_take_the_stronger_reading() -> None:
     """Which side of that disagreement the committed fixtures already take.
 
-    Vectors 04, 09 and 10 carry declared sets drawn from the seven, and all three
-    expect a refusal, which is the stronger reading's answer. As set values they are
-    two of the seven, since 04 and 09 differ only in the order of the same two members.
-    A reader deciding the ruling should know the fixtures are not neutral.
+    Vectors 04, 09 and 10 carry declared sets the two readings disagree about, and all
+    three expect a refusal, which is the stronger reading's answer. As set values they
+    are two, not three: 04 and 09 differ only in the order of the same two members. A
+    reader deciding the ruling should know the fixtures are not neutral.
+
+    Membership in the disagreement set is tested by its definition -- v0.2 present
+    alongside an entry the stronger rules refuse -- rather than against a count, since
+    the count is arithmetic in the probe list and this property is not.
     """
     fixtures = _fixtures()
     encoded = {}
@@ -919,7 +981,9 @@ def test_the_set_encodes_the_stronger_reading_on_two_of_the_seven() -> None:
                  "10-superseded-first-in-set-innocent-record-refused"):
         vector = fixtures[name]
         accepted = vector["verifier"]["accepted_profiles"]
-        assert V2 in accepted and len(accepted) > 1, f"{name} is not one of the seven"
+        assert V2 in accepted and len(accepted) > 1, (
+            f"{name}'s declared set {accepted} is not one the two readings disagree "
+            "about, so it says nothing about which reading the fixtures encode")
         assert vector["expected"]["outcome"] == "refused", (
             f"{name} no longer expects the stronger reading's answer")
         encoded[frozenset(accepted)] = vector["expected"]["failure"]
@@ -936,7 +1000,10 @@ def test_exactly_one_declared_set_is_conformant_today() -> None:
     `test_recorded_shortfalls_have_not_closed` watches, and it is kept in one place so
     the two cannot disagree about what conformant means.
     """
-    assert len(_declared_sets()) == 16, "positive control: the enumeration is not running"
+    assert len(_declared_sets()) == 2 ** len(DECLARED_SET_UNIVERSE), (
+        "positive control: the enumeration is not the powerset of the universe. This "
+        "read `== 16` until 2026-09-12, which is a literal in the probe count and not a "
+        "property, so adding a probe failed it here rather than where it belongs.")
     ok = _conformant_declared_sets()
     assert ok == [[V2]], (
         f"the conformant declared sets are now {ok}. More than one means the shortfall "
