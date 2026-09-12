@@ -52,7 +52,6 @@ load-bearing under another, which is the argument for keeping both measurements 
 than reducing the set to whichever one was run last.
 """
 from __future__ import annotations
-import base64
 import itertools
 import json
 import pathlib
@@ -105,10 +104,20 @@ def _base_checks(record: dict, trusted_jwk: dict) -> str:
     )
     if refused_by_profile_check:
         raise Refused("gate")
-    signature = record["signature"]
-    body = _sign._canonical_bytes({k: v for k, v in record.items() if k != "signature"})
-    _sign._pubkey_from_jwk(trusted_jwk).verify(
-        base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4)), body)
+    # Delegate to `verify_record` rather than replicate it. Until 2026-09-12 this
+    # function hand-copied the signature and key checks, and a hand-written copy of
+    # `verify_record`'s gates cannot see a gate that lands inside `verify_record`,
+    # which is the single event this module exists to catch. Measured: a gate at the
+    # top of `verify_record` refusing every record left the replica at 25 passed and
+    # takes the delegating version to 20 failed.
+    #
+    # The default accepted set is used deliberately. A verifier that has not read #116
+    # declares nothing, and the degenerate hardcoded set of one is exactly the state
+    # this proposal exists to replace.
+    try:
+        _sign.verify_record(record, trusted_jwk, max_age_seconds=None)
+    except Exception as exc:
+        raise Refused(str(exc)) from exc
     return profile
 
 
