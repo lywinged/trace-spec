@@ -74,8 +74,8 @@ cannot fail, is a claim to test obligation 4 that this set does not make good on
 it to whatever its own implementation emits; this one does so in `FAILURE_MARKERS`.
 
 Worth saying plainly, because the set is stricter here than the text it encodes: the
-draft in `proposals/116-verifier-compatibility-normative.md` says a verifier SHOULD
-report refusal-for-an-unimplemented-profile distinguishably from a verification failure,
+draft normative text for #116, held for a maintainer to carry and not part of this
+change, says a verifier SHOULD report refusal-for-an-unimplemented-profile distinguishably from a verification failure,
 which is coarser and is a SHOULD, and it declines to mandate any field name. Every
 refusal vector here nonetheless states a rule and the adapter asserts it. A verifier that
 applies all four obligations and reports one generic label for every refusal is caught by

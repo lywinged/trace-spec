@@ -306,23 +306,26 @@ def test_the_precondition_check_fires_and_covers_every_vector_that_needs_one() -
         _check_preconditions(Path("control.json"), lapsed)
 
 
-def test_the_proposal_states_the_real_fixture_count() -> None:
-    """The count in `proposals/116-verifier-compatibility-normative.md` is computed here
-    rather than trusted there.
+def test_the_readme_states_the_real_fixture_count() -> None:
+    """The counts in the README are computed here rather than trusted there.
 
-    It said "seven fixtures" until 2026-09-12 and had been wrong since the set grew past
-    seven. Nothing read it, which is why it stayed wrong through every green run: a
-    number no test reads is a number the suite cannot contradict. This is the test that
-    reads it.
+    The proposal document's count was the one this test used to read, and it said "seven
+    fixtures" until 2026-09-12, wrong since the set grew past seven, because nothing read
+    it. That document has left this branch; the README's two counts, the table and the
+    "self-contained" sentence, were read by nothing at all, measured by mutating one and
+    watching every test stay green. This is the test that reads them.
     """
     words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
              7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
-    proposal = (Path(__file__).parent.parent / "proposals"
-                / "116-verifier-compatibility-normative.md")
-    text = proposal.read_text(encoding="utf-8")
+    readme = (FIXTURE_DIR / "README.md").read_text(encoding="utf-8")
     count = len(FIXTURE_PATHS)
-    assert count in words, f"write the numeral out: {count} fixtures"
-    claim = f"`examples/verifier-compatibility/`, {words[count]} fixtures"
-    assert claim in text, (
-        f"{proposal.name} does not state the current fixture count. The directory holds "
-        f"{count}, so the line should read {claim!r}.")
+    rows = [line for line in readme.splitlines()
+            if line.startswith("| `") and ".json`" in line]
+    assert len(rows) == count, (
+        f"README table lists {len(rows)} fixtures, the directory holds {count}")
+    with_premise = sum("preconditions" in _load(p) for p in FIXTURE_PATHS)
+    self_contained = count - with_premise
+    assert count in words and self_contained in words, "write the numeral out"
+    claim = f"{words[self_contained].capitalize()} of the {words[count]} are self-contained"
+    assert claim in readme, (
+        f"README does not state the current counts; the sentence should read {claim!r}.")

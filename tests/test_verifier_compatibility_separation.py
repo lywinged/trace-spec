@@ -377,10 +377,11 @@ def _v_wrong_reason(record, jwk, accepted):
     configuration.
 
     Whether #116 obliges this is an open question and the honest answer is that the
-    draft text does not oblige it. `proposals/116-verifier-compatibility-normative.md`
-    says a verifier SHOULD report refusal-for-an-unimplemented-profile distinguishably
-    from a verification failure, which is a coarser distinction and a SHOULD, and its
-    "what is deliberately not required" paragraph declines to mandate any field name.
+    draft text does not oblige it. The draft normative text for #116, held for a
+    maintainer to carry and not part of this change, says a verifier SHOULD report
+    refusal-for-an-unimplemented-profile distinguishably from a verification failure,
+    which is a coarser distinction and a SHOULD, and its "what is deliberately not
+    required" paragraph declines to mandate any field name.
     The vector set is meanwhile stricter than the text it encodes: every refusal vector
     carries an `expected.failure` naming the rule, and
     `tests/test_verifier_compatibility_fixtures.py` asserts it. That gap is the finding,
