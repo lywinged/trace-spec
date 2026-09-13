@@ -305,29 +305,6 @@ def main() -> None:
             ),
         ),
         (
-            "10-superseded-first-in-set-innocent-record-refused.json",
-            fixture(
-                "superseded-first-in-set-innocent-record-refused",
-                "The same non-conformant configuration as 08, reached from the other "
-                "two directions at once. The v0.1 identifier sits first in the "
-                "accepted set rather than last, and the record presented is an "
-                "ordinary v0.2 record with nothing wrong with it. Both matter. An "
-                "implementation that scans only the tail of its accepted set passes "
-                "08 and fails here, and because the record is schema-valid and "
-                "correctly signed, a verifier implementing none of these obligations "
-                "verifies it, which is what makes this vector separate where 08 "
-                "cannot: 08's record carries v0.1 and is refused by the schema "
-                "whether or not any profile rule ran.",
-                record_profile=V0_2,
-                accepted_profiles=[V0_1, V0_2],
-                expected={
-                    "outcome": "refused",
-                    "failure": "superseded_profile_in_accepted_set",
-                    "statement": None,
-                },
-            ),
-        ),
-        (
             "11-empty-profile-string-refused.json",
             fixture(
                 "empty-profile-string-refused",

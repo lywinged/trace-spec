@@ -169,12 +169,15 @@ def test_no_set_is_satisfied_by_an_unconditional_answer(name: str) -> None:
 # here; closing it fails here too, and the entry is then deleted.
 KNOWN_THIN: dict[str, dict[str, str]] = {
     # This fork's own set, and the shape #124 established as insufficient. It was four
-    # of the five refusal rules. Two have since been closed by writing the second
+    # of the five refusal rules. One has since been closed by writing the second
     # vector: `profile_absent` by 11, which carries a profile claim that is present and
-    # empty rather than absent, and `superseded_profile_in_accepted_set` by 10, which
-    # puts the v0.1 identifier first in the accepted set rather than last.
+    # empty rather than absent. `superseded_profile_in_accepted_set` was closed by 10 for
+    # a day and is thin again: 10 left the set on 2026-09-13 under the #116 ruling that
+    # the v0.1 cutover is merged normative text and not this issue's to pin, and the
+    # configuration-side rule it exercised is now tested in `test_sign.py` beside the
+    # cutover's own tests. 08 is the vector that remains, and it is gate-covered.
     #
-    # The two that remain were measured and are not closable, which is different from
+    # The two below were measured and are not closable, which is different from
     # not yet done, so the reason is recorded here rather than left as an open task:
     #
     #   no_accepted_profiles       The rule fires on the verifier's own configuration
@@ -200,6 +203,7 @@ KNOWN_THIN: dict[str, dict[str, str]] = {
     # reports a margin that does not exist.
     "verifier-compatibility": {
         "no_accepted_profiles": "06-empty-accepted-set-refused",
+        "superseded_profile_in_accepted_set": "08-dual-accept-configuration-refused",
         "superseded_profile_refused": "03-superseded-version-refused",
     },
 }

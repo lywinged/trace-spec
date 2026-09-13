@@ -5,7 +5,7 @@ it. Nothing in the set's own tests checks that claim: they run *this* verifier a
 compare verdicts, so they pass whether or not any other implementation could pass too.
 
 Measured against a verifier implementing none of the four obligations in
-agentrust-io/trace-spec#116, the set separates 5 of its 11 vectors. The figure lives
+agentrust-io/trace-spec#116, the set separates 4 of its 10 vectors. The figure lives
 in one place, next to `SEPARATING` below, and this paragraph names it only because a
 reader arrives here first: it read `3 of 8` for as long as it took someone to notice,
 which is the drift this module exists to prevent, happening to the module's own
@@ -44,7 +44,7 @@ the reference applies and reports one generic label for every refusal, and the r
 was invisible is that `_panel_separates` compared verdicts and statements and never the
 refusal's stated cause. Widening the comparison catches it with four vectors, and moves
 one recorded figure: the membership reading now also fails vector 06, which it refuses
-for the right verdict under the wrong rule. The headline `5 of 11` is measured against
+for the right verdict under the wrong rule. The headline `4 of 10` is measured against
 the null verifier and does not move.
 
 One column is empty. It is recorded in `SHORTFALLS` with the reason and the condition
@@ -173,7 +173,7 @@ def _separates(vector: dict) -> bool:
     return expected.get("statement") is not None and statement is None
 
 
-# Recorded, not asserted as a threshold. The honest figure is 5 of 11 and a test that
+# Recorded, not asserted as a threshold. The honest figure is 4 of 10 and a test that
 # demanded more would be failing on a truth rather than on a regression. Adding a
 # separating vector fails this and the entry is updated; losing one fails it too.
 #
@@ -187,14 +187,18 @@ def _separates(vector: dict) -> bool:
 #
 # That rule is what 10 was written to, and it is why 10 separates where 08 does not
 # although both pin the same boundary: 08 presents a v0.1 record, which the schema
-# refuses on its own, and 10 presents an ordinary v0.2 record so the only thing wrong
-# is the verifier's own accepted set.
+# refuses on its own. Vector 10, which put the v0.1 identifier first in the accepted set
+# against an innocent record, left this set on 2026-09-13: the Project Lead ruled on #116
+# that the v0.1 cutover is merged normative text, so a vector for it tests an existing
+# rule rather than pinning an obligation this issue proposes, and it belongs with the
+# cutover's own coverage in `test_sign.py`. The configuration-side rule it exercised,
+# that the accepted set may not name v0.1, is still implemented in `sign.py` and is now
+# tested there.
 SEPARATING = frozenset({
     "01-known-version-verified",              # requires a statement naming the profile
     "04-unschemaed-profile-refused",          # a declared profile with no schema, last
     "06-empty-accepted-set-refused",          # the record is valid; only the config is wrong
     "09-unschemaed-profile-first-in-set-refused",  # the same defect, first in the set
-    "10-superseded-first-in-set-innocent-record-refused",  # v0.1 first, record innocent
 })
 
 
@@ -330,21 +334,6 @@ def _v_last_member_only(record, jwk, accepted):
     return "verified", _statement(profile, accepted)
 
 
-def _v_schema_coverage_only(record, jwk, accepted):
-    """Every declared member must be checkable, and no rule against the v0.1
-    identifier. Independent of the next one because `trace-v0.1.json` ships, so v0.1
-    is checkable and this rule lets it through."""
-    profile = _base_checks(record, jwk)
-    if not accepted:
-        raise Refused("no_accepted_profiles")
-    for entry in accepted:
-        if entry not in SCHEMAED:
-            raise Refused("unschemaed_profile_in_accepted_set")
-    if profile not in accepted:
-        raise Refused("profile_not_accepted")
-    return "verified", _statement(profile, accepted)
-
-
 def _v_v01_rule_only(record, jwk, accepted):
     """Never the v0.1 identifier, and no check that the rest are checkable."""
     profile = _base_checks(record, jwk)
@@ -382,7 +371,7 @@ def _v_wrong_reason(record, jwk, accepted):
     """Every rule of the reference, every refusal reported under one generic label.
 
     The near miss nothing in this module could see until 2026-09-12. It reaches the
-    right verdict on all eleven vectors and reaches it by applying the right rules; what
+    right verdict on all ten vectors and reaches it by applying the right rules; what
     it does not do is say which rule fired, so an operator handed `profile_not_accepted`
     for an empty declared set goes looking at the record instead of at their own
     configuration.
@@ -425,7 +414,6 @@ PANEL = {
     "an empty declared set read as a wildcard": _v_empty_is_wildcard,
     "declared set checked, first member only": _v_first_member_only,
     "declared set checked, last member only": _v_last_member_only,
-    "no rule against the v0.1 identifier in the set": _v_schema_coverage_only,
     "no rule that a declared member be checkable": _v_v01_rule_only,
     "obligation 2 in full, obligation 3 absent": _v_no_statement,
     "obligations 2 and 3, statement hardcoded": _v_hardcoded_profile,
@@ -485,25 +473,20 @@ SEPARATION = {
         "01-known-version-verified",
         "04-unschemaed-profile-refused",
         "06-empty-accepted-set-refused",
-        "09-unschemaed-profile-first-in-set-refused",
-        "10-superseded-first-in-set-innocent-record-refused"}),
+        "09-unschemaed-profile-first-in-set-refused"}),
     "obligation 2 as worded: a membership test": frozenset({
         "04-unschemaed-profile-refused",
         # Refuses the empty declared set, and refuses it as `profile_not_accepted`:
         # the record's profile is not in a set containing nothing. Right verdict,
         # and the rule it applied was membership rather than the rule about the set.
         "06-empty-accepted-set-refused",
-        "09-unschemaed-profile-first-in-set-refused",
-        "10-superseded-first-in-set-innocent-record-refused"}),
+        "09-unschemaed-profile-first-in-set-refused"}),
     "an empty declared set read as a wildcard": frozenset({
         "06-empty-accepted-set-refused"}),
     "declared set checked, first member only": frozenset({
         "04-unschemaed-profile-refused"}),
     "declared set checked, last member only": frozenset({
-        "09-unschemaed-profile-first-in-set-refused",
-        "10-superseded-first-in-set-innocent-record-refused"}),
-    "no rule against the v0.1 identifier in the set": frozenset({
-        "10-superseded-first-in-set-innocent-record-refused"}),
+        "09-unschemaed-profile-first-in-set-refused"}),
     "no rule that a declared member be checkable": frozenset({
         "04-unschemaed-profile-refused",
         "09-unschemaed-profile-first-in-set-refused"}),
@@ -513,8 +496,7 @@ SEPARATION = {
     "every rule applied, every refusal one generic label": frozenset({
         "04-unschemaed-profile-refused",
         "06-empty-accepted-set-refused",
-        "09-unschemaed-profile-first-in-set-refused",
-        "10-superseded-first-in-set-innocent-record-refused"}),
+        "09-unschemaed-profile-first-in-set-refused"}),
 }
 """What each near miss is caught by. Read down a column rather than across: the rows
 that appear once are the ones whose deletion would cost coverage, and the entry whose
@@ -592,7 +574,7 @@ def test_recorded_shortfalls_have_not_closed() -> None:
 def test_the_cause_comparison_is_live_and_the_gate_exemption_is_load_bearing() -> None:
     """Both halves of `_panel_separates`'s refusal branch, each shown to matter.
 
-    The comparison: `_v_wrong_reason` reaches the right verdict on all eleven vectors,
+    The comparison: `_v_wrong_reason` reaches the right verdict on all ten vectors,
     so verdict alone cannot see it. Enumerated rather than asserted as a count, because
     "it is caught" is satisfied by a verdict disagreement this test exists to rule out.
 
@@ -757,65 +739,6 @@ def _conformant_declared_sets() -> list[list[str]]:
     return out
 
 
-def test_the_two_declared_set_rules_are_independently_observable() -> None:
-    """Vectors 09 and 10 pin different rules, and this is what proves it.
-
-    They look like duplicates: both put an inadmissible entry first in the declared
-    set, both expect a refusal. The question is whether an implementation can hold one
-    rule and drop the other, and the answer turns on a fact that has to be read out of
-    the build rather than assumed: `trace-v0.1.json` ships, so the v0.1 identifier is a
-    profile this build can check. The rule forbidding it in a declared set is therefore
-    not a special case of the rule requiring every member to be checkable.
-
-    This test asserted the opposite when it was written, and passed, because the panel
-    restated the schema-coverage set as a literal instead of reading
-    `profiles_with_schema()`. Both sides of the comparison came from the same wrong
-    constant. Kept here because it is the defect issue 116 is about, committed by the
-    module written to detect it.
-    """
-    fixtures = _fixtures()
-
-    def schema_coverage_only(record, jwk, accepted):
-        """Every declared member must be checkable. No v0.1 rule at all."""
-        profile = _base_checks(record, jwk)
-        if not accepted:
-            raise Refused("no_accepted_profiles")
-        for entry in accepted:
-            if entry not in SCHEMAED:
-                raise Refused("unschemaed_profile_in_accepted_set")
-        if profile not in accepted:
-            raise Refused("profile_not_accepted")
-        return "verified", _statement(profile, accepted)
-
-    def v01_rule_only(record, jwk, accepted):
-        """Never the v0.1 identifier. No schema-coverage check."""
-        profile = _base_checks(record, jwk)
-        if not accepted:
-            raise Refused("no_accepted_profiles")
-        if V01 in accepted:
-            raise Refused("superseded_profile_in_accepted_set")
-        if profile not in accepted:
-            raise Refused("profile_not_accepted")
-        return "verified", _statement(profile, accepted)
-
-    assert V01 in SCHEMAED, (
-        "positive control: the whole argument rests on the v0.1 identifier being a "
-        "profile this build carries a schema for, which is why `trace-v0.1.json` "
-        "ships. If that stops being true the two rules collapse into one and vector "
-        "10 stops pinning anything of its own.")
-
-    dropped_v01 = {n for n, v in fixtures.items()
-                   if _panel_separates(schema_coverage_only, v)}
-    dropped_coverage = {n for n, v in fixtures.items()
-                        if _panel_separates(v01_rule_only, v)}
-    assert dropped_v01 == {"10-superseded-first-in-set-innocent-record-refused"}, (
-        f"dropping the v0.1 rule is caught by {sorted(dropped_v01)}")
-    assert dropped_coverage == {"04-unschemaed-profile-refused",
-                                "09-unschemaed-profile-first-in-set-refused"}, (
-        f"dropping schema coverage is caught by {sorted(dropped_coverage)}")
-    assert not (dropped_v01 & dropped_coverage), (
-        "the two rules are caught by the same vectors, so the set cannot tell them "
-        "apart and should not be read as testing two")
 
 
 def _membership_only(accepted: list[str], record: dict, jwk: dict) -> tuple[str, str | None]:
@@ -1009,8 +932,7 @@ def test_the_committed_fixtures_already_take_the_stronger_reading() -> None:
     fixtures = _fixtures()
     encoded = {}
     for name in ("04-unschemaed-profile-refused",
-                 "09-unschemaed-profile-first-in-set-refused",
-                 "10-superseded-first-in-set-innocent-record-refused"):
+                 "09-unschemaed-profile-first-in-set-refused"):
         vector = fixtures[name]
         accepted = vector["verifier"]["accepted_profiles"]
         assert V2 in accepted and len(accepted) > 1, (
@@ -1019,8 +941,9 @@ def test_the_committed_fixtures_already_take_the_stronger_reading() -> None:
         assert vector["expected"]["outcome"] == "refused", (
             f"{name} no longer expects the stronger reading's answer")
         encoded[frozenset(accepted)] = vector["expected"]["failure"]
-    assert len(encoded) == 2, (
-        f"expected two distinct declared sets across those three vectors, got {len(encoded)}")
+    assert len(encoded) == 1, (
+        f"expected one declared set across those two vectors, which declare the same two "
+        f"members in opposite order, got {len(encoded)}")
 
 
 def test_exactly_one_declared_set_is_conformant_today() -> None:
@@ -1053,7 +976,7 @@ MARGIN = {
     "no_accepted_profiles":               (1, 1),
     "profile_absent":                     (2, 0),
     "profile_not_accepted":               (2, 0),
-    "superseded_profile_in_accepted_set": (2, 1),
+    "superseded_profile_in_accepted_set": (1, 0),
     "superseded_profile_refused":         (1, 0),
     "unschemaed_profile_in_accepted_set": (2, 2),
     "verified":                           (1, 1),
@@ -1087,3 +1010,29 @@ def test_margin_measured_in_separating_vectors_is_what_is_recorded() -> None:
     assert any(sep < total for total, sep in MARGIN.values()), (
         "positive control: if no rule had a nominal margin above its separating "
         "margin, this test would be asserting a tautology")
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["tag:agentrust-io.com,2026:trace-v0.2", 123, None, {"a": 1}, b"bytes", [1, 2]],
+    ids=["bare-str", "int", "None", "dict", "bytes", "non-str-elements"],
+)
+def test_accepted_profiles_refuses_the_shapes_that_iterate_wrongly(value):
+    """Found by the #325 sweep on the rebase, not by this file. A bare URI string was
+    iterated as characters and refused for naming ``'t'`` as an unschemaed profile, which
+    is the right verdict with the wrong cause, the class the panel above was widened to
+    see. An int or None left ``verify_record`` as ``TypeError``, undocumented. All six
+    now refuse with the documented ``ValueError`` and a message about the shape."""
+    from agentrust_trace import sign
+    with pytest.raises(ValueError, match="accepted_profiles must"):
+        sign.verify_record({}, None, accepted_profiles=value)
+
+
+def test_accepted_profiles_guard_is_load_bearing():
+    """Control: a real tuple gets past the shape guard and is refused, if at all, for
+    what it contains. Without this the test above could pass against a guard that
+    refuses everything."""
+    from agentrust_trace import sign
+    with pytest.raises(ValueError) as caught:
+        sign.verify_record({}, None, accepted_profiles=("tag:example.com,2025:trace-v0.0",))
+    assert "carries no schema" in str(caught.value)

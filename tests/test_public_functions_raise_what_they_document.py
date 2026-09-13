@@ -229,10 +229,10 @@ KEYWORD_CALLS: dict[str, tuple[Callable[[], dict[str, Any]], tuple[str, ...]]] =
                      "revocation_bundle": _CTX["bundle"],
                      "trusted_bundle_keys": _CTX["trusted_bundle_keys"],
                      "max_bundle_age_seconds": _CTX["max_bundle_age_seconds"],
-                     "now": _CTX["now"]},
+                     "now": _CTX["now"], "accepted_profiles": sign.DEFAULT_ACCEPTED_PROFILES},
         ("public_key_or_jwk", "allow_embedded_key", "max_age_seconds",
          "max_future_skew_seconds", "expected_nonce", "revocation", "revocation_bundle",
-         "trusted_bundle_keys", "max_bundle_age_seconds", "now"),
+         "trusted_bundle_keys", "max_bundle_age_seconds", "now", "accepted_profiles"),
     ),
 }
 

@@ -432,6 +432,26 @@ def _pubkey_from_jwk(jwk: dict[str, Any]) -> Any:
     return Ed25519PublicKey.from_public_bytes(x_bytes)
 
 
+def _profiles_of(value: Any) -> tuple[str, ...]:
+    """Materialise ``accepted_profiles``, refusing the shapes that iterate wrongly.
+
+    A ``str`` iterates as characters, so a bare profile URI became a declared set of
+    one-character profiles and was refused for the wrong reason. A ``dict`` iterates as
+    its keys. An ``int`` or ``None`` raised ``TypeError``, which this module does not
+    document. Same shape as ``revocation._sequence_of``, found by the same sweep.
+    """
+    if isinstance(value, (str, bytes, bytearray, dict)) or not hasattr(value, "__iter__"):
+        raise ValueError(
+            f"accepted_profiles must be an iterable of profile URI strings, got "
+            f"{type(value).__name__}. Pass DEFAULT_ACCEPTED_PROFILES or an explicit set."
+        )
+    items = tuple(value)
+    bad = sorted({type(v).__name__ for v in items if not isinstance(v, str)})
+    if bad:
+        raise ValueError(f"accepted_profiles must contain only str values, found {bad}")
+    return items
+
+
 def verify_record(
     record: dict[str, Any],
     public_key_or_jwk: Any = None,
@@ -566,7 +586,7 @@ def verify_record(
     # Profile first: refuse semantics this build does not implement, before spending
     # any work on the record. Reading it pre-signature is safe because the only action
     # taken on an unauthenticated value here is refusal.
-    accepted = tuple(accepted_profiles)
+    accepted = _profiles_of(accepted_profiles)
     if not accepted:
         raise ValueError(
             "accepted_profiles is empty: a verifier that declares no supported profile "

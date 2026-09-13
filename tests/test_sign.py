@@ -206,6 +206,25 @@ def test_verify_record_rejects_superseded_v0_1_profile():
         verify_record(record, key_to_jwk(key))
 
 
+def test_verify_record_rejects_v0_1_in_the_accepted_set():
+    """The configuration side of the same cutover: a verifier may not declare v0.1 in
+    its accepted set, whatever record it is shown. Moved here from the #116 vector set
+    on 2026-09-13 under the ruling that the cutover is merged normative text and its
+    coverage belongs with the cutover, not with a proposal. The record is an ordinary
+    v0.2 one so the refusal can only come from the set.
+    """
+    key = generate_key()
+    record = sign_record(_fresh_record_with_profile(TRACE_PROFILE_V0_2), key)
+
+    with pytest.raises(ValueError, match="superseded v0.1 identifier"):
+        verify_record(record, key_to_jwk(key),
+                      accepted_profiles=(TRACE_PROFILE_V0_1, TRACE_PROFILE_V0_2))
+
+    # Control: the same record and key with the v0.1 tag removed from the set verifies,
+    # so the refusal above is the set's and not the record's.
+    verify_record(record, key_to_jwk(key), accepted_profiles=(TRACE_PROFILE_V0_2,))
+
+
 def test_verify_record_rejects_unknown_profile():
     """A future or foreign profile is refused, not best-effort verified."""
     key = generate_key()
