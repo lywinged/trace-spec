@@ -49,16 +49,33 @@ refuse verification. It MUST NOT verify on a best-effort basis, and MUST NOT dow
 result to a warning. A valid signature over semantics the verifier does not implement is
 not evidence, and reporting it as a qualified success misrepresents what was established.
 
+Two consequences follow from the declaration, and they rest on different grounds. A
+verifier that declares nothing has not declared its set, and is non-conformant on the
+wording of this rule alone: an empty declaration is not a declaration. Separately, a
+verifier cannot support a profile it cannot check, so a URI whose schema the verifier does
+not carry MUST NOT appear in its declared set, whatever the verifier's documentation says
+it implements. The first is a rule about the declaration; the second is a rule about what
+a declaration may truthfully contain.
+
 Refusal under this rule is distinct from a verification failure. A record refused for an
 unimplemented profile has not been shown to be invalid; it has not been examined. A
 verifier SHOULD report the two distinguishably, so that a relying party can tell "this
 record is bad" from "this reader cannot read it".
 
 **Statement content.** A verification result MUST identify the profile the record was
-verified under. Where the result is machine-readable, the profile URI MUST appear as a
-distinct field rather than being implied by the verifier's identity or version. A result
-that does not name its profile cannot be re-interpreted later, which is the situation this
-section exists to prevent.
+verified under, and MUST carry the set of profile URIs the verifier declared at the time
+of verification. Where the result is machine-readable, both MUST appear as distinct fields
+rather than being implied by the verifier's identity or version. A result that does not
+name its profile cannot be re-interpreted later, which is the situation this section
+exists to prevent.
+
+The declared set is carried for a different reason than the profile. The declaration
+required above says nothing about where it survives, and if it lives only in the
+verifier's documentation, a result read years later cannot be interpreted: what that
+build supported is no longer recoverable, which is the condition this section opens with.
+Recording the set at verification time is what makes the declaration auditable after the
+verifier is gone. The profile alone does not distinguish a verifier that supported only
+one profile from one that supported two and met a record under the older of them.
 
 A verification result SHOULD additionally state which checks were performed, so that a
 check that did not run is distinguishable from a check that passed. In particular, a
@@ -68,9 +85,10 @@ the boundary stated in `LIMITATIONS.md`).
 
 **Disclosed fallback.** A verifier MAY implement more than one profile. Where it verifies
 a record under a profile that is not the most recent it implements, the verification
-result MUST disclose that, either by stating the full set of profiles the verifier
-declared or by an equivalent explicit marker. Silent fallback to older semantics is
-non-conformant.
+result MUST make that visible. The declared set required above already does so, since a
+reader can see that a newer profile was available and not used; an implementation MAY add
+an explicit marker but MUST NOT omit the set in favour of one. Silent fallback to older
+semantics is non-conformant.
 
 This permits an implementation to support an older profile deliberately, while making the
 support visible in the artifact rather than resident in the verifier's configuration where
@@ -89,6 +107,13 @@ serialisation; a severity level does not.
 satisfy the refusal rule perfectly and still emit a result that no future reader can
 interpret, because it never says which semantics it applied. The two failures are
 independent and both are live.
+
+**Why the declared set is in the statement.** An earlier draft argued this from symmetry
+with the declaration rule. The Project Lead's ruling on #116 replaced that ground with the
+one now in the text: the declaration rule says nothing about where the declaration
+survives, and recording the set at verification time is what makes it auditable once the
+verifier build is gone. Symmetry would have made the set a duplicate of the declaration;
+auditability makes it the only surviving copy.
 
 **What is deliberately not required.** No field name is mandated for the machine-readable
 statement. TRACE does not define a verification-result format, and inventing one inside
