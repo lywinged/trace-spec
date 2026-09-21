@@ -7,7 +7,9 @@ of silently skipping the evidence checks. No hardware verification is mocked.
 
 from __future__ import annotations
 
+import base64
 import copy
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -125,3 +127,53 @@ def test_embedded_signer_is_not_established_by_external_context() -> None:
             rules._pubkey_from_jwk(trusted_jwk).verify(signature, body)
 
     assert vector["expected"]["signer_trust"] == "not-established"
+
+
+# ---------------------------------------------------------------------------
+# The document and the pre-image it names
+# ---------------------------------------------------------------------------
+
+RFC = (Path(__file__).resolve().parents[2] / "docs/rfcs/runtime-evidence-profile.md").read_text(
+    encoding="utf-8"
+)
+
+
+def test_the_rfc_names_the_pre_image_the_grader_actually_hashes() -> None:
+    """Section 7.2 is the only place in the RFC that gives a construction for the binding.
+
+    Section 5.2 settles what to bind and stops, and rule 6 says the guest-controlled
+    field is compared against the record's `cnf` key. So this one sentence is what a
+    second implementation copies, and its two readings are not interchangeable:
+    `cnf.jwk.x` is a base64url string, and the grader hashes the key bytes that
+    string encodes. An implementation that hashes the member's value instead
+    produces a record whose quote verifies, whose signature verifies, and whose
+    binding check says no, which is the hardest kind of disagreement to find across
+    two repositories.
+
+    This pins the sentence to `generate.py`'s own helper rather than to a copy of it.
+    It does not exercise rule 6 end to end: that needs a quote whose REPORT_DATA
+    commits to a key under test, and minting one needs the hardware. What it
+    establishes is that the grader decodes before it hashes, and that the document
+    names the reading the grader takes.
+    """
+    raw = bytes(range(32))
+    x = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    # The load-bearing half: the grader's own helper decodes, so the digest it takes
+    # is over the key rather than over its encoding. This fails if unb64u changes.
+    assert rules.unb64u(x) == raw
+    from_bytes = hashlib.sha256(rules.unb64u(x)).digest()
+    assert from_bytes == hashlib.sha256(raw).digest()
+
+    # A statement about SHA-256 rather than about this repository, kept because it is
+    # the reason the sentence has to be exact. It cannot fail without a collision.
+    assert from_bytes != hashlib.sha256(x.encode()).digest()
+
+    assert "`base64url-decode(cnf.jwk.x)`" in RFC, (
+        "section 7.2 no longer names the decode, so the only construction the RFC "
+        "gives is the reading that does not verify"
+    )
+    assert "`sha256(cnf.jwk.x)`" not in RFC, (
+        "section 7.2 states the digest over the member's value; the grader hashes "
+        "the key bytes it encodes, see the key-binding rule in generate.py"
+    )
