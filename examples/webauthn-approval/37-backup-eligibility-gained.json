@@ -1,0 +1,140 @@
+{
+  "id": "TRACE-WAPR-037",
+  "name": "backup-eligibility-gained",
+  "description": "The registry records the credential as not backup eligible and the assertion has BE set: a device-bound credential now reporting that it can be synced.",
+  "spec": "docs/rfcs/webauthn-approval-profile.md",
+  "context": {
+    "now": 1790067600,
+    "clock_skew_seconds": 0,
+    "policy": {
+      "require_uv_for_deny": false
+    },
+    "supported_algorithms": [
+      -7,
+      -8
+    ],
+    "credentials": {
+      "uuJmzignzdZuvymZi-gx-g": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "AbT995aBRlQePsyXVbi2IbASeFOq90gDioiK_zOC-hk",
+          "y": "KJ1KyRAoc0ncfKlT6Pm-rcdM7hndfdBxnT8yZ2SbMDk"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org",
+          "https://review.approvals.example.org"
+        ],
+        "approver": "approver-ops-lead",
+        "attestation": "attested",
+        "backup_eligible": false,
+        "sign_count": 4
+      },
+      "eyXstNUexBXL0aCa0S7yGg": {
+        "public_key": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "N-4H1_K9qvtKpunqHjbHAQya1WSJxgXeSIAPfhnb_Bs"
+        },
+        "alg": -8,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-reviewer",
+        "attestation": "self-asserted"
+      },
+      "KxRwTJG0QhFMwLdF7tfOOA": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "4GcgSxut_TQkmEr4BrVPynfh2ntcbKdwtyYtLQ86Xcw",
+          "y": "Z4xgj2lFrtRVZjnaZDCnFKrxYo8-bETlhZcy8kpB7YA"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-auditor",
+        "attestation": "attested",
+        "backup_eligible": false,
+        "sign_count": 0
+      },
+      "wo-TNEQMxLYTsU0UeniquQ": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-384",
+          "x": "G0l4gn8r5pNNXOJXRYzrN8mbo-vdYgRF_Dx0BVju1BxKor7_IflVzWAnbSY8la7i",
+          "y": "eds4UxP2ZjEMjdMekkLvTkHAdaPmD1mCvw1fhw59AiR7sVBP2pzAZEQ-k0l06Tme"
+        },
+        "alg": -35,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-release-manager",
+        "attestation": "attested",
+        "backup_eligible": false,
+        "sign_count": 12
+      },
+      "woNDAnonlRDtcUPUKQ8iCA": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "JcUokI_Ci0FrfyunleYR9G4EQltMVoB6njg82rn0NQA",
+          "y": "nmjQ_pbqijCX-C0xaih04uFTQyPWS4kLqKPPCcfea34"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-on-call",
+        "attestation": "self-asserted",
+        "backup_eligible": true,
+        "sign_count": 0
+      }
+    },
+    "identity": {
+      "approver-ops-lead": "https://idp.example.org/users/ops-lead",
+      "approver-reviewer": "https://idp.example.org/users/reviewer",
+      "approver-auditor": "https://idp.example.org/users/auditor",
+      "approver-release-manager": "https://idp.example.org/users/release-manager",
+      "approver-on-call": "https://idp.example.org/users/on-call",
+      "approver-build-operator": "https://idp.example.org/users/build-operator",
+      "approver-7c1d": "spiffe://trust.example.org/agent/build-bot"
+    }
+  },
+  "artifact": {
+    "profile": "tag:agentrust-io.com,2026:webauthn-approval-v1",
+    "approval": {
+      "approval_id": "approval/backup-eligibility-gained",
+      "decision": "allow",
+      "approver": "approver-ops-lead",
+      "credential_id": "uuJmzignzdZuvymZi-gx-g",
+      "rp_id": "approvals.example.org",
+      "origin": "https://approvals.example.org",
+      "subject_kind": "pic-trace-bridge-authorization",
+      "subject_digest": "sha256:f7be6aa22e058db64ea812e3289d003697896ce0f52338c02cfa4137f80765e7",
+      "nonce": "b-vVPhhIPcHxNNqsiRJ7_A",
+      "issued_at": 1790067480,
+      "expires_at": 1790068080
+    },
+    "assertion": {
+      "authenticator_data": "L_sga-6xMVMHUwVzYX4x7j6wHIoofyOy7vzXhnxxuScNAAAABQ",
+      "client_data_json": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiS1o1cjB5RGhydVM2eVBpaFBYX05uM0gwWEpQVXk3RnlUdmxiZjNsZGtEZyIsIm9yaWdpbiI6Imh0dHBzOi8vYXBwcm92YWxzLmV4YW1wbGUub3JnIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ",
+      "signature": "MEQCIHnyDV9gHil0dnrl0uJarv5TY0bygy4Sd1mln5XtLCi3AiBde0jFzGVtN6OF3ZpwnJrvc47d262tsnf5kLmTSJm8DA",
+      "alg": -7
+    }
+  },
+  "expected": {
+    "outcome": "approval-invalid",
+    "codes": [
+      "backup_eligibility_changed"
+    ],
+    "credential_attestation": "attested"
+  }
+}

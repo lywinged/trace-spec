@@ -1,0 +1,67 @@
+{
+  "id": "browser-capture",
+  "description": "One artifact captured from Chromium's WebAuthn stack with a DevTools virtual authenticator (CTAP2, internal, user verification). Not part of the corpus and not reproducible byte for byte: the key, the nonce and the times are fresh on every run.",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+  "captured_at": "2026-09-22T22:26:42.000Z",
+  "context": {
+    "now": 1790116007,
+    "clock_skew_seconds": 0,
+    "policy": {
+      "require_uv_for_deny": false
+    },
+    "supported_algorithms": [
+      -7,
+      -8
+    ],
+    "credentials": {
+      "LB4nMhq_AOPic4Cvx0KeObJ5AH6TCvmPcOBtF1wexIY": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "D-0BQzjRjSc7xMz0C5ZyL5i5KoFzCHMGsnNEifSwyZE",
+          "y": "g4qWLiGYTYYavDsWIrjpXs5bOxHANteiQHbLtvuCMZA"
+        },
+        "alg": -7,
+        "rp_id": "localhost",
+        "origins": [
+          "http://localhost:42509"
+        ],
+        "approver": "approver-ops-lead",
+        "attestation": "self-asserted",
+        "backup_eligible": false,
+        "sign_count": 1
+      }
+    },
+    "identity": {
+      "approver-ops-lead": "https://idp.example.org/users/ops-lead"
+    }
+  },
+  "artifact": {
+    "profile": "tag:agentrust-io.com,2026:webauthn-approval-v1",
+    "approval": {
+      "approval_id": "approval/browser-capture",
+      "decision": "allow",
+      "approver": "approver-ops-lead",
+      "credential_id": "LB4nMhq_AOPic4Cvx0KeObJ5AH6TCvmPcOBtF1wexIY",
+      "rp_id": "localhost",
+      "origin": "http://localhost:42509",
+      "subject_kind": "pic-trace-bridge-authorization",
+      "subject_digest": "sha256:2548dc0885fdeafb0b25a7e37f9223a8c4272852ebb99a608bf7c31d60284020",
+      "nonce": "uhx-exEr4qHfAT_J5aaeLQ",
+      "issued_at": 1790116002,
+      "expires_at": 1790116602
+    },
+    "assertion": {
+      "authenticator_data": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAg",
+      "client_data_json": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiMkV0ellFR2lteUdaWXM5clBvUDdtZjdCMFFlTUcxdzdqQU9PLUJEMXc3WSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6NDI1MDkiLCJjcm9zc09yaWdpbiI6ZmFsc2V9",
+      "signature": "MEQCIAdtYnI5kDeBIju8SqzsV2frNg321bXzBc0n_dRgJHzZAiA_zazRsE4oyf5ijXLtp2k1PNJ6CQn8NONDwL_Ln2aPdA",
+      "alg": -7
+    }
+  },
+  "client_data_decoded": {
+    "type": "webauthn.get",
+    "challenge": "2EtzYEGimyGZYs9rPoP7mf7B0QeMG1w7jAOO-BD1w7Y",
+    "origin": "http://localhost:42509",
+    "crossOrigin": false
+  }
+}

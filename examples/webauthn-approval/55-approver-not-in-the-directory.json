@@ -1,0 +1,204 @@
+{
+  "id": "TRACE-WAPR-055",
+  "name": "approver-not-in-the-directory",
+  "description": "The credential is registered, the approval is valid, and the directory does not list the approver, so nothing establishes that the approver is not the record's subject.",
+  "spec": "docs/rfcs/webauthn-approval-profile.md",
+  "context": {
+    "now": 1790067600,
+    "clock_skew_seconds": 0,
+    "policy": {
+      "require_uv_for_deny": false
+    },
+    "supported_algorithms": [
+      -7,
+      -8
+    ],
+    "credentials": {
+      "uuJmzignzdZuvymZi-gx-g": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "AbT995aBRlQePsyXVbi2IbASeFOq90gDioiK_zOC-hk",
+          "y": "KJ1KyRAoc0ncfKlT6Pm-rcdM7hndfdBxnT8yZ2SbMDk"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org",
+          "https://review.approvals.example.org"
+        ],
+        "approver": "approver-ops-lead",
+        "attestation": "attested",
+        "backup_eligible": false,
+        "sign_count": 4
+      },
+      "eyXstNUexBXL0aCa0S7yGg": {
+        "public_key": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "N-4H1_K9qvtKpunqHjbHAQya1WSJxgXeSIAPfhnb_Bs"
+        },
+        "alg": -8,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-reviewer",
+        "attestation": "self-asserted"
+      },
+      "KxRwTJG0QhFMwLdF7tfOOA": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "4GcgSxut_TQkmEr4BrVPynfh2ntcbKdwtyYtLQ86Xcw",
+          "y": "Z4xgj2lFrtRVZjnaZDCnFKrxYo8-bETlhZcy8kpB7YA"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-auditor",
+        "attestation": "attested",
+        "backup_eligible": false,
+        "sign_count": 0
+      },
+      "wo-TNEQMxLYTsU0UeniquQ": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-384",
+          "x": "G0l4gn8r5pNNXOJXRYzrN8mbo-vdYgRF_Dx0BVju1BxKor7_IflVzWAnbSY8la7i",
+          "y": "eds4UxP2ZjEMjdMekkLvTkHAdaPmD1mCvw1fhw59AiR7sVBP2pzAZEQ-k0l06Tme"
+        },
+        "alg": -35,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-release-manager",
+        "attestation": "attested",
+        "backup_eligible": false,
+        "sign_count": 12
+      },
+      "woNDAnonlRDtcUPUKQ8iCA": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "JcUokI_Ci0FrfyunleYR9G4EQltMVoB6njg82rn0NQA",
+          "y": "nmjQ_pbqijCX-C0xaih04uFTQyPWS4kLqKPPCcfea34"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-on-call",
+        "attestation": "self-asserted",
+        "backup_eligible": true,
+        "sign_count": 0
+      },
+      "pfZRUmsQ7_ciiAlAcXW_ww": {
+        "public_key": {
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "xAcn7ugbIARbvDP4QrexMx6jR8VKil22vETzeWb2r-M",
+          "y": "a33t9xm3BCYqXLqqLGJOLVQh2WYfC5fYE-jm49PB4sI"
+        },
+        "alg": -7,
+        "rp_id": "approvals.example.org",
+        "origins": [
+          "https://approvals.example.org"
+        ],
+        "approver": "approver-visiting-auditor",
+        "attestation": "self-asserted",
+        "sign_count": 0
+      }
+    },
+    "identity": {
+      "approver-ops-lead": "https://idp.example.org/users/ops-lead",
+      "approver-reviewer": "https://idp.example.org/users/reviewer",
+      "approver-auditor": "https://idp.example.org/users/auditor",
+      "approver-release-manager": "https://idp.example.org/users/release-manager",
+      "approver-on-call": "https://idp.example.org/users/on-call",
+      "approver-build-operator": "https://idp.example.org/users/build-operator",
+      "approver-7c1d": "spiffe://trust.example.org/agent/build-bot"
+    },
+    "record_signer_jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "ZAsKseNJI-hlcePVvzEQh51tiZ4eW6mqiMHWXIpkHDE"
+    }
+  },
+  "artifact": {
+    "profile": "tag:agentrust-io.com,2026:webauthn-approval-v1",
+    "approval": {
+      "approval_id": "approval/approver-not-in-the-directory",
+      "decision": "allow",
+      "approver": "approver-visiting-auditor",
+      "credential_id": "pfZRUmsQ7_ciiAlAcXW_ww",
+      "rp_id": "approvals.example.org",
+      "origin": "https://approvals.example.org",
+      "subject_kind": "pic-trace-bridge-authorization",
+      "subject_digest": "sha256:f7be6aa22e058db64ea812e3289d003697896ce0f52338c02cfa4137f80765e7",
+      "nonce": "fnz_nxxwlRVdAbZ7r6PmtA",
+      "issued_at": 1790067480,
+      "expires_at": 1790068080
+    },
+    "assertion": {
+      "authenticator_data": "L_sga-6xMVMHUwVzYX4x7j6wHIoofyOy7vzXhnxxuScFAAAAAQ",
+      "client_data_json": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoic1QwR2RCNHpCQVloWkxPZHVEM1BSNlVlNWg0WkMwYWQtMnc2MHBUcnMzQSIsIm9yaWdpbiI6Imh0dHBzOi8vYXBwcm92YWxzLmV4YW1wbGUub3JnIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ",
+      "signature": "MEYCIQDfxbgp6lPZkqDx17vC_SUZd0RHTH7Q2KlbUZtbFb7FIgIhAPzCY1NVd5RIkraX4T2GrwOHviCtnh1ZYW_6JK46YtRP",
+      "alg": -7
+    }
+  },
+  "record": {
+    "eat_profile": "tag:agentrust-io.com,2026:trace-v0.2",
+    "iat": 1790067540,
+    "subject": "spiffe://trust.example.org/agent/build-bot",
+    "model": {
+      "provider": "example",
+      "model_id": "example-model"
+    },
+    "runtime": {
+      "platform": "software-only",
+      "measurement": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "policy": {
+      "bundle_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "enforcement_mode": "enforce"
+    },
+    "data_class": "internal",
+    "build_provenance": {
+      "slsa_level": 1,
+      "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "appraisal": {
+      "status": "none",
+      "verifier": "https://verifier.example.org"
+    },
+    "cnf": {
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "ZAsKseNJI-hlcePVvzEQh51tiZ4eW6mqiMHWXIpkHDE"
+      }
+    },
+    "references": [
+      {
+        "rel": "approval-outcome",
+        "id": "approval/approver-not-in-the-directory",
+        "resolver": "https://approvals.example.org/approvals",
+        "digest": "sha256:63b2b4a648933ffb2b83bbbf55431385dfc4a337626f12fc8b6d11eb8874fb02",
+        "retention": "P10Y"
+      }
+    ],
+    "signature": "8FxZLWrOPIau7IHhKRxVKfIpG7sksIn898lVvs4_UN-ijgeXCLCLVtizOJGs85tD1oWkz1DO9eWUWsrf4tweDA"
+  },
+  "expected": {
+    "outcome": "approval-unverifiable",
+    "codes": [
+      "approver_unresolved"
+    ],
+    "credential_attestation": "self-asserted"
+  }
+}

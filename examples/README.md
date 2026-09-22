@@ -49,6 +49,12 @@ checking any archived record, including these.
   verifies exactly as the pass does, unresolvable, and an issuer whose key the relying
   party does not hold. Every digest recomputes; see that directory's README and
   `docs/references-registry.md`.
+- `webauthn-approval/`: 72 approval artifacts whose signature is a WebAuthn
+  authentication assertion, each with the relying party's configuration it is judged
+  under, eleven of them cited by a signed Trust Record through `rel: "approval-outcome"`,
+  and in `browser-capture/` one artifact captured from a browser, which is not a vector.
+  Informative: the artifact is not a Trust Record, and the rules it is judged by are the
+  proposal in `docs/rfcs/webauthn-approval-profile.md`. See that directory's README.
 
 The schema sets `additionalProperties: false`, so examples must not carry
 non-schema keys such as `_comment`. Keep descriptive notes in this file.

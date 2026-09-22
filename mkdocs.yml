@@ -229,6 +229,7 @@ nav:
           - Composable zero-knowledge proofs: docs/rfcs/composable-zk-assurance.md
           - A2A delegation-link verification profile: docs/rfcs/a2a-delegation-profile.md
           - Runtime evidence and verifier grades: docs/rfcs/runtime-evidence-profile.md
+          - Passkey-signed approvals: docs/rfcs/webauthn-approval-profile.md
       - Crosswalks:
           - OWASP Agentic Top 10: docs/crosswalks/owasp-agentic-top-10.md
           - MITRE ATLAS: docs/crosswalks/mitre-atlas.md

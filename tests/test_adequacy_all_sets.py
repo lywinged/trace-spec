@@ -138,6 +138,21 @@ def reproducibility_claim() -> list[Vector]:
                  lambda e: e["outcome"], lambda e: list(e.get("codes") or []))
 
 
+def webauthn_approval() -> list[Vector]:
+    """The webauthn-approval set. Boundaries are its codes, one code per rule:
+    `tests/webauthn_approval_margins.json` records the margin per code and
+    `tests/test_webauthn_approval_completeness.py` holds each rule to it.
+
+    Only `approval-valid` accepts. `not-an-approval` is a validly signed refusal and
+    `approval-unverifiable` is a check not made, and neither is usable as an approval,
+    which is the direction this grading asks about. Advisory codes ride on accepting
+    vectors and are counted like any other code.
+    """
+    return _load("webauthn-approval",
+                 lambda e: "accept" if e["outcome"] == "approval-valid" else e["outcome"],
+                 lambda e: list(e.get("codes") or []))
+
+
 SETS = {
     "build-provenance-depth": (build_provenance_depth, _depth_boundary),
     "reproducibility-claim": (reproducibility_claim, None),
@@ -145,6 +160,7 @@ SETS = {
     "canonicalization-boundary": (canonicalization_boundary, None),
     "delegation-link": (delegation_link, None),
     "verifier-compatibility": (verifier_compatibility, None),
+    "webauthn-approval": (webauthn_approval, None),
 }
 
 # Every set must be able to fail both unconditional implementations. A set that
