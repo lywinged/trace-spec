@@ -14,6 +14,10 @@
 
 <!-- Which section(s) of spec/trace-v0.2.md does this affect? -->
 
+## Tests for a fix
+
+<!-- For a change under src/ that fixes a bug or makes a verifier reject input it used to accept: the test that fails without the change, and one other fix run against the tests, with the result. See "Before a pull request is reviewed" in CONTRIBUTING.md. Otherwise write "Not a library fix". -->
+
 ## Checklist
 
 - [ ] DCO sign-off on all commits (`git commit -s`)

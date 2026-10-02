@@ -29,6 +29,33 @@ replacement. Read the changed line in the shape a reader meets it, rendered
 rather than as source, and run something that could have caught the new mistake.
 The check you just fixed is not that something.
 
+## Before a pull request is reviewed
+
+This section applies to pull requests opened after it was added, from any
+author. Dependency updates opened by Dependabot are exempt.
+
+CI runs the checks above on every pull request, and a pull request is reviewed
+once that run is green.
+
+A pull request that changes the reference library under `src/` to fix a bug, or
+to make a verifier reject input it used to accept, also shows in its
+description:
+
+- the test that fails without the change. Where the change adds more than one
+  such check, one test for each, each failing when its check is removed. If no
+  test can observe the change, say so and why.
+- one other fix a reviewer might write instead, run against the tests, and the
+  result. If the tests cannot tell it apart from yours, say so. If no other fix
+  is worth running, say why in a sentence.
+
+Where CI is red or either item is missing, the reviewer's first response is a
+pointer to this section naming what is missing, and the review follows once it
+is there.
+
+Issues are not held to this. An issue about the reference library helps most
+when it names the commit or release it was found at and gives a reproduction
+that runs there.
+
 ## Using AI to contribute
 
 Use agents. A lot of this was built with them and saying otherwise would be dishonest.
