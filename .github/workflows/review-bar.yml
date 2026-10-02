@@ -1,0 +1,50 @@
+name: Review bar
+
+# Runs the two checks "Before a pull request is reviewed" in CONTRIBUTING.md asks
+# a library fix to describe: the changed tests against the merge base, and small
+# mutants of the added src/ lines against the changed tests. The result goes in
+# the job summary. It never fails the build and writes nothing to the pull
+# request: it is evidence for the reviewer, so it needs no write token and does
+# not run the code under pull_request_target.
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "tools/review_bar.py"
+      - ".github/workflows/review-bar.yml"
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: review-bar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Full history, so the merge base and the base commit's files are present.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install package and dev deps
+        run: |
+          pip install --require-hashes -r requirements/dev.txt
+          pip install --no-deps -e .
+
+      - name: Run the review bar
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python tools/review_bar.py --base "$BASE_SHA" --head "$HEAD_SHA" --summary "$GITHUB_STEP_SUMMARY"
