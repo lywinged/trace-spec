@@ -11,6 +11,43 @@ Format: [Semantic Versioning](https://semver.org/). Spec versions follow `MAJOR.
 
 ## [Unreleased]
 
+- **`adapters`: validate `data_class`, policy/appraisal/SLSA fields, URI formats, and
+  UTF-8 string boundaries in `TraceAGTAdapter`, `TraceSandboxAdapter`, and
+  `SandboxAttestation`.** Both adapters now reject empty, non-string, or lone-surrogate
+  `data_class` and string configuration values, validate `PolicyInfo`, `Appraisal`, and
+  `BuildProvenance` at both `__init__` and `build_trust_record`, and enforce RFC 3986
+  URI format (matching `validate_json`) on `transparency`, `appraisal_verifier`,
+  `appraisal_policy_ref`, `build_provenance_uri`, `policy_uri`, and
+  `SandboxAttestation.rim_uri` (#615, by @drk-ram).
+
+- **`tdx_collateral` and `snp_collateral`: TCB status validation, minimal DER integer
+  decoding, and policy input validation.** `tdx_collateral._converge` now validates both
+  `platform` and `other` against `_STATUS_TO_QV` while preserving Intel DCAP QVL's
+  `convergeTcbStatuses` (`EvaluateTcb.cpp:187-225` at `d12717e3`) convergence semantics,
+  and `tdx_collateral` rejects non-minimal DER length and integer encodings in PCK SGX
+  extensions. `snp_collateral._der_uint` now rejects negative, non-minimal, and
+  out-of-range (`> 255`) DER integers in VCEK TCB extensions, and `TcbFloor`,
+  `CollateralPolicy`, `appraise_collateral`, and `tcb_component` validate their input
+  types and fail closed with `CollateralDenied` (#603, #610, by @drk-ram; review by
+  @dinakarjs and @lywinged).
+
+- **Acta receipt verifier: JWK, signature hex, and JSON input hardening.**
+  `tools/acta_receipt_verifier.py` now rejects JWKs carrying private or symmetric key
+  parameters (`d`, `p`, `q`, `dp`, `dq`, `qi`, `oth`, `k`) or non-canonical unpadded
+  base64url `x` values in `issuer_key` (`malformed_key_set`), requires `signature.sig`
+  in `signature_verifies` to be 128 lowercase hex characters without whitespace
+  (`signature_invalid`), rejects duplicate JSON object keys and catches `RecursionError`
+  in `_read_json` (`malformed`), and handles uncanonicalizable or deeply nested payloads
+  and predecessors in `signature_verifies` and `chain_link_matches` (#605, by @drk-ram).
+
+- **NIST SP 800-53 Rev 5 and DoD AI Tailoring Guide crosswalk.**
+  `docs/crosswalks/nist-sp800-53-dod-ai-tailoring.md` maps each TRACE v0.2 Trust Record
+  claim to the SP 800-53 Rev 5 controls it is evidence for, with what the claim
+  establishes, what an assessor still needs, and the item of the DoD CIO *AI
+  Cybersecurity Risk Management Tailoring Guide* (v2, July 2025) it answers, and states
+  what a record does not evidence for an authorization package. Informative; no schema
+  or wire-format change (#486, by @antagoninc, with corrections from @dinakarjs).
+
 - **`prototype.gate_store` and `prototype.cmcp_gate`: binary store secrets, canonical
   base64url/JSON frames, `GateStoreUnavailable` response wrapping, and `CMCPTraceGate`
   entry checks.** `GateStoreServer` and `RemoteGateStore` now both require a `bytes`
